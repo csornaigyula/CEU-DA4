@@ -17,8 +17,6 @@ The following section of the code installs and includes the important libraries 
 
 ```{r setup_data_acquisition}
 # Install and attach necessary packages
-install.packages("moments")
-
 library(readstata13)
 library(moments)
 library(plyr)
@@ -29,9 +27,9 @@ library(stargazer)
 library(ggplot2)
 library(caret)
 
-setwd("~/Dropbox/Dataanalysis_development_shared/prediction/CaseStudy_usedcars/data")
+#setwd("~/Dropbox/Dataanalysis_development_shared/prediction/CaseStudy_usedcars/data")
 
-craigslist_data <- read.dta13("CraigslistData.dta") 
+craigslist_data <- read.dta13("ToyotaCamryCraigslist2015.dta") 
 ```
 
 ### Feature engineering 01
@@ -518,7 +516,7 @@ summary(out_sample_4)
 
 Calculating prediction on training set, error, squared error
 
-```{r global_in_trts_03_pred_errs}
+```{r global_in_trts_04_pred_errs}
 usedcars_predict_test$pred_m4 <- predict(out_sample_4, newdata = usedcars_predict_test)
 usedcars_predict_test$e_m4 <- usedcars_predict_test$lnprice - usedcars_predict_test$pred_m4
 usedcars_predict_test$e2_m4 <- usedcars_predict_test$e_m4 ^ 2
@@ -574,6 +572,18 @@ for (i in 1:5){
 ```
 
 ### Model 1
+
+The following loop 
+
+* goes through all 5 setups in cross validation
+* names the models in each step Mi
+* picks the training set i and runs a linear model with lnprice on age and miles
+* predicts the test set outcomes based on model (predm1_i)
+* compares test set outcome with model outcome (errorm1_i)
+* calculates squared error for the model (e2m1_i)
+* prints summary statistics
+
+```{r cv_model1}
 model1 <- list()
 for (i in 1:5){
   model1[[paste("M", i, sep = "")]] <- lm(data = usedcars_predict_2017[usedcars_predict_2017[, paste("train", i, sep = "")] == 1, ], lnprice ~ age + miles)
@@ -581,9 +591,22 @@ for (i in 1:5){
   usedcars_predict_2017[, paste("errorm1_", i, sep = "")] <- (usedcars_predict_2017$lnprice - usedcars_predict_2017[, paste("predm1_", i, sep = "")]) * usedcars_predict_2017[, paste("test", i, sep = "")] 
   usedcars_predict_2017[, paste("e2m1_", i, sep = "")] <- usedcars_predict_2017[, paste("errorm1_", i, sep = "")]^2
   print(summary(usedcars_predict_2017[usedcars_predict_2017[paste("test", i, sep = "")] == 1, paste("e2m1_", i, sep = "")]))
-} 
+}
+```
 
-# Model 2
+### Model 2
+
+The following loop 
+
+* goes through all 5 setups in cross validation
+* names the models in each step Mi
+* picks the training set i and runs a linear model with lnprice on age and miles with both aspects (before and after 30,000 miles)
+* predicts the test set outcomes based on model (predm2_i)
+* compares test set outcome with model outcome (errorm2_i)
+* calculates squared error for the model (e2m2_i)
+* prints summary statistics 
+
+```{r cv_model2}
 model2 <- list()
 for (i in 1:5){
   model2[[paste("M", i, sep = "")]] <- lm(data = usedcars_predict_2017[usedcars_predict_2017[, paste("train", i, sep = "")] == 1, ], lnprice ~ age + miles030 + miles30p)
@@ -591,9 +614,22 @@ for (i in 1:5){
   usedcars_predict_2017[, paste("errorm2_", i, sep = "")] <- (usedcars_predict_2017$lnprice - usedcars_predict_2017[, paste("predm2_", i, sep = "")]) * usedcars_predict_2017[, paste("test", i, sep = "")] 
   usedcars_predict_2017[, paste("e2m2_", i, sep = "")] <- usedcars_predict_2017[, paste("errorm2_", i, sep = "")]^2
   print(summary(usedcars_predict_2017[usedcars_predict_2017[paste("test", i, sep = "")] == 1, paste("e2m2_", i, sep = "")]))
-} 
+}
+```
 
-# Model 3
+### Model 3
+
+The following loop 
+
+* goes through all 5 setups in cross validation
+* names the models in each step Mi
+* picks the training set i and runs a linear model with lnprice on age and miles's both aspects and using city dummy
+* predicts the test set outcomes based on model (predm3_i)
+* compares test set outcome with model outcome (errorm3_i)
+* calculates squared error for the model (e2m3_i)
+* prints summary statistics 
+
+```{r cv_model3}
 model3 <- list()
 for (i in 1:5){
   model3[[paste("M", i, sep = "")]] <- lm(data = usedcars_predict_2017[usedcars_predict_2017[, paste("train", i, sep = "")] == 1, ], lnprice ~ age + miles030 + miles30p + cityID)
@@ -602,8 +638,21 @@ for (i in 1:5){
   usedcars_predict_2017[, paste("e2m3_", i, sep = "")] <- usedcars_predict_2017[, paste("errorm3_", i, sep = "")]^2
   print(summary(usedcars_predict_2017[usedcars_predict_2017[paste("test", i, sep = "")] == 1, paste("e2m3_", i, sep = "")]))
 } 
+```
 
-# Model 4
+### Model 4
+
+The following loop 
+
+* goes through all 5 setups in cross validation
+* names the models in each step Mi
+* picks the training set i and runs a linear model with lnprice on age and miles's both aspects, city dummy, and interactions with city dummy.
+* predicts the test set outcomes based on model (predm4_i)
+* compares test set outcome with model outcome (errorm4_i)
+* calculates squared error for the model (e2m4_i)
+* prints summary statistics 
+
+```{r cv_model4}
 model4 <- list()
 for (i in 1:5){
   model4[[paste("M", i, sep = "")]] <- lm(data = usedcars_predict_2017[usedcars_predict_2017[, paste("train", i, sep = "")] == 1, ], lnprice ~ age:cityID + miles030:cityID + miles30p:cityID + cityID)
@@ -612,29 +661,61 @@ for (i in 1:5){
   usedcars_predict_2017[, paste("e2m4_", i, sep = "")] <- usedcars_predict_2017[, paste("errorm4_", i, sep = "")]^2
   print(summary(usedcars_predict_2017[usedcars_predict_2017[paste("test", i, sep = "")] == 1, paste("e2m4_", i, sep = "")]))
 }
+```
 
-#############################################
-##### Non-Denver sample: evaluate for Denver
+## Non-Denver sample: evaluate for Denver
 
-# Model 1
+In the final section we are creating a global model and after prediction we check how it performs specifically on Denver.
+
+### Model 1
+
+Linear model with 2 RHS, on global working set
+```{r finalmod1}
 final_denver_1 <- lm(data = usedcars_predict_2017, lnprice ~ age + miles)
-usedcars_predict_2017$predict_denver_1 <- predict(final_denver_1)
-usedcars_predict_2017$e2_denver_1 <- (usedcars_predict_2017$lnprice - usedcars_predict_2017$predict_denver_1) ^ 2
-summary(usedcars_predict_2017$e2_denver_1[usedcars_predict_2017$city == "Denver"])
+```
 
-# Model 2
+Prediction 
+```{r finalpred1}
+usedcars_predict_2017$predict_denver_1 <- predict(final_denver_1)
+```
+
+Calculating squared prediction error between predicted and actual values of lnprice
+
+```{r final_sqrerr1}
+usedcars_predict_2017$e2_denver_1 <- (usedcars_predict_2017$lnprice - usedcars_predict_2017$predict_denver_1) ^ 2
+```
+
+Final summary stats for model1, analyzing Denver only
+```{r final_stats1}
+summary(usedcars_predict_2017$e2_denver_1[usedcars_predict_2017$city == "Denver"])
+```
+
+### Model 2
+
+Linear model with 2 RHS, on global working set, using 2 aspects of miles
+```{r finalmod2}
 final_denver_2 <- lm(data = usedcars_predict_2017, lnprice ~ age + miles030 + miles30p)
 usedcars_predict_2017$predict_denver_2 <- predict(final_denver_2)
 usedcars_predict_2017$e2_denver_2 <- (usedcars_predict_2017$lnprice - usedcars_predict_2017$predict_denver_2) ^ 2
 summary(usedcars_predict_2017$e2_denver_2[usedcars_predict_2017$city == "Denver"])
+```
 
-# Model 3
+### Model 3
+
+Linear model with 2 RHS, on global working set, using 2 aspects of miles, adding city dummies
+
+```{r finalmod3}
 final_denver_3 <- lm(data = usedcars_predict_2017, lnprice ~ age + miles030 + miles30p + cityID)
 usedcars_predict_2017$predict_denver_3 <- predict(final_denver_3)
 usedcars_predict_2017$e2_denver_3 <- (usedcars_predict_2017$lnprice - usedcars_predict_2017$predict_denver_3) ^ 2
 summary(usedcars_predict_2017$e2_denver_3[usedcars_predict_2017$city == "Denver"])
+```
 
-# Model 4
+### Model 4
+
+Linear model with 2 RHS, on global working set, using 2 aspects of miles, adding city dummies, interacting features with city dummy.
+
+```{r finalmod4}
 final_denver_4 <- lm(data = usedcars_predict_2017, lnprice ~ cityID:age + cityID:miles030 + cityID:miles30p + cityID)
 usedcars_predict_2017$predict_denver_4 <- predict(final_denver_4)
 usedcars_predict_2017$e2_denver_4 <- (usedcars_predict_2017$lnprice - usedcars_predict_2017$predict_denver_4) ^ 2
