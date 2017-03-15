@@ -9,9 +9,8 @@ output: pdf_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
 
-### Setup and data acquisition
+## Setup and data acquisition
 
 The following section of the code installs and includes the important libraries for modeling. Data is stored in a .dta file, which is a binary format. The function call stores the data in a data frame called *craigslist_data*.
 
@@ -32,7 +31,9 @@ library(caret)
 craigslist_data <- read.dta13("ToyotaCamryCraigslist2015.dta") 
 ```
 
-### Feature engineering 01
+## Feature engineering
+
+### Initial transformations
 
 Multiplying price variable with 1000 for those lines where the *city* feature value is *Omaha*.
 
@@ -95,7 +96,7 @@ craigslist_data[craigslist_data$price < 500 & is.na(craigslist_data$price) == FA
 craigslist_data[craigslist_data$miles > 500000 & is.na(craigslist_data$miles) == FALSE, 3:5]
 ```
 
-### Feature engineering
+### More feature engineering
 
 #### Price analysis and transformation
 
