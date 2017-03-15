@@ -1,0 +1,643 @@
+---
+title: "DA4, assignment1"
+author: "CSORNAI, Gyula - 134706"
+date: "March 15, 2017"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+### Setup and data acquisition
+
+The following section of the code installs and includes the important libraries for modeling. Data is stored in a .dta file, which is a binary format. The function call stores the data in a data frame called *craigslist_data*.
+
+```{r setup_data_acquisition}
+# Install and attach necessary packages
+install.packages("moments")
+
+library(readstata13)
+library(moments)
+library(plyr)
+library(data.table)
+library(lmtest)
+library(sandwich)
+library(stargazer)
+library(ggplot2)
+library(caret)
+
+setwd("~/Dropbox/Dataanalysis_development_shared/prediction/CaseStudy_usedcars/data")
+
+craigslist_data <- read.dta13("CraigslistData.dta") 
+```
+
+### Feature engineering 01
+
+Multiplying price variable with 1000 for those lines where the *city* feature value is *Omaha*.
+
+```{r feat_eng01}
+craigslist_data$price[craigslist_data$city == "Omaha"] <- craigslist_data$price[craigslist_data$city == "Omaha"] * 1000
+```
+
+The following snippet creates a function, which uses an input vector, and with omitting *NA* values it calculates, median, minimum and maximum and returns the result in a vector.
+```{r func_minmaxmed}
+min_max_med <- function(x) {
+  c(median = median(x, na.rm = TRUE), min = min(x, na.rm = TRUE), max = max(x, na.rm = TRUE))
+}
+```
+
+```{r todo01}
+by(craigslist_data$miles, INDICES = craigslist_data$city, FUN = min_max_med)
+```
+
+The following section creates a vector, that contains 4 cities and iterates over cities one by one, multiplying the *miles* feature with 1000 - most possibly this is not realistic.
+
+```{r fixup_4city_miles}
+city_miles <- c("Albuquerque", "Columbus", "Omaha", "Tampa")
+for(i in city_miles){
+  craigslist_data$miles[craigslist_data$city == i] <- craigslist_data$miles[craigslist_data$city == i] * 1000
+}
+```
+
+The following section multiplies the *miles* feature values in those cases, where the value is not *NA*, but it is under 1000.
+
+```{r fixup_other_miles}
+craigslist_data$miles[craigslist_data$miles < 1000 & is.na(craigslist_data$miles) == FALSE] <- craigslist_data$miles[craigslist_data$miles < 1000 & is.na(craigslist_data$miles) == FALSE] * 1000
+```
+
+Dropping the data from Tucson. Also reordering columns
+```{r fee_drop_tucson}
+craigslist_data <- craigslist_data[which(craigslist_data$city != "Tucson"),]
+
+craigslist_data <- craigslist_data[, c(6, 1, 4, 2, 3, 5, 7)]
+```
+
+The following snippet writes the data's current format to a CSV file.
+```{r write_csv}
+write.csv(file = "toyota_camry_craigslist", x = craigslist_data, row.names = FALSE)
+```
+
+The following snippet creates a function, which calculates the minimum,maximum and sum of the vector, with omitting NAs and adding the results to a vector.
+```{r func_minmaxN}
+min_max_n <- function(x) {
+  c(min = min(x, na.rm = TRUE), max = max(x, na.rm = TRUE), N = sum(!is.na(x)))
+}
+```
+
+```{r todo3}
+t(apply(craigslist_data[3:6], 2, min_max_n))
+```
+
+Checking the columns 3, 4 and 5 for those rows, where the price is either too low (under 500USD) or too high (over 500,000 USD), but the miles value is not NA.
+```{r check_data01}
+craigslist_data[craigslist_data$price < 500 & is.na(craigslist_data$price) == FALSE, 3:5]
+craigslist_data[craigslist_data$miles > 500000 & is.na(craigslist_data$miles) == FALSE, 3:5]
+```
+
+### Feature engineering
+
+#### Price analysis and transformation
+
+The following section drops those lines, where *price* is *NA*, and keeps the one wherte it is not.
+
+```{r fee_drop_NAprice}
+craigslist_data <- craigslist_data[which(is.na(craigslist_data$price) == FALSE),]
+```
+
+The following section first lists those rows, where price is under 100 USD, after that it drops them from the dataset.
+
+```{r fee_drop_sub100}
+craigslist_data[craigslist_data$price < 100,]
+craigslist_data <- craigslist_data[which(craigslist_data$price > 100),]
+```
+
+Creating new variable *lnprice* and assigning the log of *price* variable.
+Also obtaining summary statistics of lnprice.
+
+```{r fee_trf_price}
+craigslist_data$lnprice <- log(craigslist_data$price)
+summary(craigslist_data$lnprice)
+```
+
+#### Dealer analysis and transformation
+
+Visualizing dealers
+```{r fee_dealer_viz}
+table(craigslist_data$dealer)
+```
+
+Removing those lines, where the car is not coming from a dealer. As discussed on the slides private owners may set up egsotic unique prices, hence filtering them out.
+```{r fee_dealer_filter}
+craigslist_data <- craigslist_data[which(craigslist_data$dealer != 1),]
+```
+
+#### Age analysis and transformation
+
+Creating *age* variables from the difference of the year the car was produced and 2015. Showing summary statistics.
+
+```{r fee_age_create}
+craigslist_data$age <- 2015 - craigslist_data$year
+summary(craigslist_data$age)
+```
+
+Showing the age distribution in different quantiles (1%, 4%, 10%, Q1, median, Q3, 90%, 95%, 99%). Checking standard deviation, skewness and kurtosis of age distribution.
+
+```{r fee_agestat_viz}
+quantile(craigslist_data$age, c(0.01, 0.04, 0.1, 0.25, 0.50,  0.75, 0.90, 0.95, 0.99))
+sd(craigslist_data$age)
+skewness(craigslist_data$age)
+kurtosis(craigslist_data$age)
+```
+
+#### Distance analysis and transformation
+
+Dropping observations with age higher than 20 years
+```{r fee_drop_20plus}
+craigslist_data <- craigslist_data[which(craigslist_data$age <= 20),]
+```
+
+Dropping observations where *miles* feature is NA
+```{r fee_distance_dropNA}
+craigslist_data <- craigslist_data[which(is.na(craigslist_data$miles) == FALSE),]
+```
+
+Analyzing and later dropping observations, where *miles* feature is larger than 500,000, later those as well, where larger than 250,000. Based on the slides the justification is that "price - miles relationship different there."
+```{r fee_distance_dropBigMiles}
+craigslist_data[craigslist_data$miles > 500000,]
+craigslist_data <- craigslist_data[which(craigslist_data$miles <= 500000),]
+craigslist_data <- craigslist_data[which(craigslist_data$miles <= 250000),]
+```
+
+
+```{r todo4}
+craigslist_data <- ddply(craigslist_data,.(city, price, age, miles),transform, multiple = NROW(piece))
+craigslist_data <- craigslist_data[order(craigslist_data[,1], craigslist_data[, 2]),]
+count(craigslist_data$multiple)
+
+craigslist_data[craigslist_data$multiple == 4,]
+```
+
+#### Ordering
+
+The following section reorders dataset based on 1st, 3rd, 9th and 5th columns.
+```{r fee_reordering_rows}
+craigslist_data <- craigslist_data[order(craigslist_data[,1], craigslist_data[, 3], craigslist_data[,9], craigslist_data[, 5]),]
+```
+
+
+#### Uniqueness transformations
+
+Transforming data.frame to data.table
+```{r trd_dt}
+craigslist_data <- data.table(craigslist_data)
+```
+
+Counting the number of price, where *city*, *price*, *age* and *miles* are the same and transforming back theresult to data.frame
+```{r fee_uniq_chk}
+craigslist_data <- craigslist_data[ , temp := 1:.N , by = c("city" , "price", "age", "miles") ]
+craigslist_data <- data.frame(craigslist_data)
+```
+
+Checking unique values,  keeping those only, where we have exactly one car described by the 4 features. After this, getting rid of the temporary variable.
+```{r fee_keep_uniq}
+count(craigslist_data$temp)
+craigslist_data <- craigslist_data[which(craigslist_data$temp == 1),]
+craigslist_data$temp <- NULL
+```
+
+#### Transforming city feature 
+
+Transforming the city variable to factors.
+```{r fee_trf_city}
+craigslist_data$cityID <- as.factor(craigslist_data$city)
+```
+
+#### Look at descriptive statistics 
+
+Descriptive statistics for price, log-price, mileage and age both for full dataset and those lines only, where none of the 4 are *NA*.
+Also printing standard deviation values for the non-NA values feature by feature
+```{r fee_stats_plnpma}
+summary(craigslist_data[, c(3,5,8,9)])
+
+summary(!is.na(craigslist_data[, c(3,5,8,9)]))
+
+for(i in c(3,5,8,9)){
+  print(sd(craigslist_data[,i]))
+}
+```
+
+
+#### Keeping features for prediction only
+
+We drop every variable, what we do not want to use for prediction, and 
+```{r fee_colnames}
+craigslist_data <- craigslist_data[, c("city", "cityID", "id", "price", "lnprice", "age", "miles", "dealer")]
+
+colnames(craigslist_data)
+craigslist_data <- craigslist_data[order(craigslist_data[,1], craigslist_data[, 2], craigslist_data[,3], craigslist_data[, 4], craigslist_data[,5], craigslist_data[, 6], craigslist_data[,7], craigslist_data[, 8]),]
+```
+
+
+#### Save your data
+
+The following section saves the working set to a new variable and also writes out the results to a CSV file .
+
+```{r save_data02}
+usedcars_predict_2017 <- craigslist_data
+write.csv(file = "usedcars_predict_2017.csv", x = usedcars_predict_2017, row.names = FALSE)
+```
+
+#### Normalizing miles
+
+We divide the miles with 1000 here.
+
+```{r fee_norm_miles}
+usedcars_predict_2017$miles <- usedcars_predict_2017$miles / 1000
+```
+
+
+### Special analysis of DENVER  
+
+Taking the subset of the working set, where the *city* is * **Denver** *
+
+```{r subset_denver}
+denver <- subset(usedcars_predict_2017[usedcars_predict_2017$city == "Denver",])
+```
+
+Checking data in columns 4, 6, 7, generting summary statistics and standard deviations for these columns.
+
+```{r denver_stats}
+summary(denver[, c(4,6:7)])
+
+summary(!is.na(denver[, c(4,6:7)]))
+
+for(i in c(4,6:7)){
+  print(sd(denver[,i]))
+}
+```
+
+Checking on 8 year old cars in Denver
+```{r denver_8ycars}
+denver[denver$age == 8, c(1,4,6:7)]
+```
+
+#### Regression analysis
+
+Linear regression model on the Denver dataset.
+
+LHS: lnprice
+
+
+RHS: age and miles
+
+```{r denver_linreg}
+denver_reg <- lm(data = denver, lnprice ~ age + miles)
+```
+
+Covariance matrix for the variables in denver. **vcovHC** is Robust Covariance Matrix Estimators a la White for panel models. The main use of vcovHC is to be an argument to other functions, e.g. for Wald--type testing: argument vcov.
+
+```{r denver_covar_HC}
+denver_cov <- vcovHC(denver_reg, "HC1")
+```
+
+Calculating robust SE on Denver dataset
+```{r denver_robust_se}
+denver_robust_se <- sqrt(diag(denver_cov))
+```
+
+Coefficient test with the robust SE, 3 digits accuracy. Output is a txt file.
+```{r denver_coeffs}
+stargazer(list(denver_reg), se = list(denver_robust_se), omit.stat = "f", digits = 3, out = "denver_reg.txt")
+```
+#### AIC
+
+Akaike's 'An Information Criterion' for one or several fitted model objects for which a log-likelihood value can be obtained, according to the formula 
+$$ AIC = -2 * log-likelihood + k * npar$$
+
+, where npar represents the number of parameters in the fitted model, and k = 2 for the usual AIC, or k = log(n) (n being the number of observations) for the so-called BIC or SBC (Schwarz's Bayesian criterion).
+When comparing models fitted by maximum likelihood to the same data, the smaller the AIC or BIC, the better the fit.
+
+The theory of AIC requires that the log-likelihood has been maximized: whereas AIC can be computed for models not fitted by maximum likelihood, their AIC values should not be compared.
+```{r denver_AIC}
+AIC(denver_reg)
+```
+
+#### BIC
+
+This generic function calculates the Bayesian information criterion, also known as Schwarz's Bayesian criterion (SBC), for one or several fitted model objects for which a log-likelihood value can be obtained, according to the formula
+$$BIC = -2*log-likelihood + npar*log(nobs)$$
+, where npar represents the number of parameters and nobs the number of observations in the fitted model.
+
+```{r denver_BIC}
+BIC(denver_reg)
+```
+
+Plotting linear model and scatterplot witg a vertical line at age 8.
+
+```{r denver_lmplot}
+ggplot(data = denver, aes(x = age, y = lnprice)) + geom_vline(xintercept=8, colour = "red") +
+             geom_smooth(method = "lm", colour = "blue", se = FALSE) +
+             geom_point(size = 2.5, colour = "black")
+```
+
+## PREDICTION: In-sample
+
+In the following models the modeller did not separate training and test dataset (also did not use cross validation), only based the prediction on the dataset as-is.
+
+### Model 1
+
+In this section we are redoing the same linar model what we did for Denver, but on the whole dataset:
+
+* Linear model and summary stats
+* AIC
+* BIC
+
+```{r global_linreg}
+in_sample_1 <- lm(data = usedcars_predict_2017, lnprice ~ age + miles)
+summary(in_sample_1)
+
+AIC(in_sample_1)
+BIC(in_sample_1)
+```
+
+### Model 2
+
+The following 2 charts show the 2 aspects of the linear regression:
+
+* the dependency between age and lnprice with local polynomial smoothing
+* the dependency between miles and price with local polynomial smoothing, also usning a vertical red line at 30 (30,000 miles barrier)
+
+```{r global_plot_lnprice_age}
+ggplot(data = usedcars_predict_2017, aes(x = age, y = lnprice)) + geom_smooth()
+```
+
+```{r global_plot_lnprice_miles}
+ggplot(data = usedcars_predict_2017, aes(x = miles, y = lnprice)) + geom_smooth() +
+  geom_vline(xintercept=30, colour = "red")
+```
+
+
+The following section creates a new variable *miles030*, which is assigned with value 30 for cars with more than 30,000 miles run. After this creates *miles30p*, which shows the miles ran over 30,000 miles , which can be used for prediction.
+
+```{r global_mile_ceiling}
+usedcars_predict_2017$miles030 <- usedcars_predict_2017$miles
+usedcars_predict_2017$miles030[usedcars_predict_2017$miles030 > 30] <- 30
+usedcars_predict_2017$miles30p <- usedcars_predict_2017$miles - usedcars_predict_2017$miles030
+```
+
+The second model essentially creates a linear model, where the LHS is *lnprice*, the RHS are *age*, the miles that the car ran before 30,000 and those miles, that the car ran over 30,000. Summary stats, AIC and BIC below.
+
+```{r global_model2_30k}
+in_sample_2 <- lm(data = usedcars_predict_2017, lnprice ~ age + miles030 + miles30p)
+summary(in_sample_2)
+
+AIC(in_sample_2)
+BIC(in_sample_2)
+```
+
+### Model 3 (+ city dummies)
+
+The third model extends model2 with city dummies
+
+```{r global_model3_30k_city}
+in_sample_3 <- lm(data = usedcars_predict_2017, lnprice ~ age + miles030 + miles30p +cityID)
+summary(in_sample_3)
+```
+
+### Model 4 (interactions with cities)
+
+The fourth model uses interactions with cities
+
+```{r global_model3_30k_city_interact}
+in_sample_4 <- lm(data = usedcars_predict_2017, lnprice ~ cityID + cityID:age + cityID:miles030 + cityID:miles30p)
+summary(in_sample_4)
+```
+
+Coefficient analysis details output to a txt file for all 4 models.
+
+```{r global_4mod_coefftest}
+stargazer(list(in_sample_1), list(in_sample_2), list(in_sample_3), list(in_sample_4), digits = 3, out = "in_sample.txt")
+```
+
+
+
+##PREDICTION: Out-of-sample
+
+In the following models the modeller did  separate training and test dataset in approximately 80-20 ratio (but did not use cross validation).
+
+Separating training sample for the 80%: first checking what should be the size of the set, than set a seed for randomization, and finally chosing the ids randomly to the training set. The remaining ids go to test set. This creates 2 new data frames: *usedcars_predict_train* as the training set and *usedcars_predict_test* as test set
+
+```{r global_train_test_sep}
+smp_size <- floor(0.8 * nrow(usedcars_predict_2017))
+
+set.seed(197103)
+
+train_ids <- sample(seq_len(nrow(usedcars_predict_2017)), size = smp_size)
+
+usedcars_predict_train <- usedcars_predict_2017[train_ids, ]
+usedcars_predict_test <- usedcars_predict_2017[-train_ids, ]
+```
+
+### Model 1
+
+The first model is the same linear model as in the previous in-sample01, but it is based only on the training set
+
+```{r global_in_trts_01}
+out_sample_1 <- lm(data = usedcars_predict_train, lnprice ~ age + miles)
+summary(out_sample_1)
+```
+
+Checking prediction result on te training set
+
+```{r global_in_trts_01_pred}
+usedcars_predict_test$pred_m1 <- predict(out_sample_1, newdata = usedcars_predict_test)
+```
+
+Checking the error of prediction
+
+```{r global_in_trts_01_pred_err}
+usedcars_predict_test$e_m1 <- usedcars_predict_test$lnprice - usedcars_predict_test$pred_m1
+```
+
+Calculation squared error of prediction
+
+```{r global_in_trts_01_pred_sqerr}
+usedcars_predict_test$e2_m1 <- usedcars_predict_test$e_m1 ^ 2
+summary(usedcars_predict_test$e2_m1)
+```
+
+### Model 2
+
+In the second model we differentiate between the first 30,000 miles and the miles after the fist 30,000 again. Modeling again only on training set.
+
+Linear model with 3 RHS (1 + 2 types of mile aspects)
+```{r global_in_trts_02}
+out_sample_2 <- lm(data = usedcars_predict_train, lnprice ~ age + miles030 + miles30p)
+summary(out_sample_2)
+```
+
+Calculating prediction on training set, error, squared error
+
+```{r global_in_trts_02_pred_errs}
+usedcars_predict_test$pred_m2 <- predict(out_sample_2, newdata = usedcars_predict_test)
+usedcars_predict_test$e_m2 <- usedcars_predict_test$lnprice - usedcars_predict_test$pred_m2
+usedcars_predict_test$e2_m2 <- usedcars_predict_test$e_m2 ^ 2
+summary(usedcars_predict_test$e2_m2)
+```
+
+### Model 3
+
+Model3 extends model 2 with city dummies. Trains on training set, validates on test set.
+
+Linear model with 4 RHS (1 + 2 types of mile aspects + city dummies)
+```{r global_in_trts_03}
+out_sample_3 <- lm(data = usedcars_predict_train, lnprice ~ age + miles030 + miles30p + cityID)
+summary(out_sample_3)
+```
+
+Calculating prediction on training set, error, squared error
+
+```{r global_in_trts_03_pred_errs}
+usedcars_predict_test$pred_m3 <- predict(out_sample_3, newdata = usedcars_predict_test)
+usedcars_predict_test$e_m3 <- usedcars_predict_test$lnprice - usedcars_predict_test$pred_m3
+usedcars_predict_test$e2_m3 <- usedcars_predict_test$e_m3 ^ 2
+summary(usedcars_predict_test$e2_m3)
+```
+
+### Model 4
+
+Model4 extends model3 with interactions with city dummies. Trains on training set, validates on test set. 
+
+```{r global_in_trts_04}
+out_sample_4 <- lm(data = usedcars_predict_train, lnprice ~ cityID + cityID:age + cityID:miles030 + cityID:miles30p)
+summary(out_sample_4)
+```
+
+Calculating prediction on training set, error, squared error
+
+```{r global_in_trts_03_pred_errs}
+usedcars_predict_test$pred_m4 <- predict(out_sample_4, newdata = usedcars_predict_test)
+usedcars_predict_test$e_m4 <- usedcars_predict_test$lnprice - usedcars_predict_test$pred_m4
+usedcars_predict_test$e2_m4 <- usedcars_predict_test$e_m4 ^ 2
+summary(usedcars_predict_test$e2_m4)
+```
+
+Analyzing coefficients of the 4 models
+
+```{r global_coefftest_trts}
+summary(usedcars_predict_test[, c(13, 16, 19, 22)])
+stargazer(list(out_sample_1), list(out_sample_2), list(out_sample_3), list(out_sample_4), digits = 3, out = "out_sample.txt")
+```
+
+
+## Five-Fold Cross-Validation
+
+In this section the training and the test sets are separated with tme method of 5 folds cross-validation. This means, that rows are assigned to 5 groups, and the training happens on 4 groups out of the 5 and validation on the 4th. 
+
+New randomization and creating the 5 groups from the original (cleaned and prepared) working set.
+
+```{r mod_5fold_setup}
+set.seed(197301)
+ffcv5 <- createFolds(1:nrow(usedcars_predict_2017), k = 5, list = TRUE, returnTrain = FALSE)
+(ffcv5)[1] 
+```
+
+Iterating through the 5 folds and adding an indicator flag to the column, where the actual row belongs.
+
+```{r 5fold_indicator_iterate}
+for(i in c("Fold1", "Fold2", "Fold3", "Fold4", "Fold5")){
+    usedcars_predict_2017[,i] <- 0
+    usedcars_predict_2017[ffcv5[[i]], i] <- 1 
+}
+```
+
+Renaming indicator columns
+```{r 5fold_indicator_rename}
+colnames(usedcars_predict_2017)[11:15] <- c("test1", "test2", "test3", "test4", "test5")
+```
+
+Indicating training set
+```{r 5fold_indicator_iterate_train}
+for(i in c("train1", "train2", "train3", "train4", "train5")){
+  usedcars_predict_2017[,i] <- 1
+}
+```
+
+Making sure, that if one row is indicated to be in the test set * **i** *, it is not in the training set * **i** *
+```{r 5fold_safeguard}
+for (i in 1:5){
+  usedcars_predict_2017[usedcars_predict_2017[paste("test", i, sep = "")] == 1, paste("train", i, sep = "")] <- 0
+}
+```
+
+### Model 1
+model1 <- list()
+for (i in 1:5){
+  model1[[paste("M", i, sep = "")]] <- lm(data = usedcars_predict_2017[usedcars_predict_2017[, paste("train", i, sep = "")] == 1, ], lnprice ~ age + miles)
+  usedcars_predict_2017[, paste("predm1_", i, sep = "")] <- predict(model1[[paste("M", i, sep = "")]], newdata = usedcars_predict_2017)
+  usedcars_predict_2017[, paste("errorm1_", i, sep = "")] <- (usedcars_predict_2017$lnprice - usedcars_predict_2017[, paste("predm1_", i, sep = "")]) * usedcars_predict_2017[, paste("test", i, sep = "")] 
+  usedcars_predict_2017[, paste("e2m1_", i, sep = "")] <- usedcars_predict_2017[, paste("errorm1_", i, sep = "")]^2
+  print(summary(usedcars_predict_2017[usedcars_predict_2017[paste("test", i, sep = "")] == 1, paste("e2m1_", i, sep = "")]))
+} 
+
+# Model 2
+model2 <- list()
+for (i in 1:5){
+  model2[[paste("M", i, sep = "")]] <- lm(data = usedcars_predict_2017[usedcars_predict_2017[, paste("train", i, sep = "")] == 1, ], lnprice ~ age + miles030 + miles30p)
+  usedcars_predict_2017[, paste("predm2_", i, sep = "")] <- predict(model2[[paste("M", i, sep = "")]], newdata = usedcars_predict_2017)
+  usedcars_predict_2017[, paste("errorm2_", i, sep = "")] <- (usedcars_predict_2017$lnprice - usedcars_predict_2017[, paste("predm2_", i, sep = "")]) * usedcars_predict_2017[, paste("test", i, sep = "")] 
+  usedcars_predict_2017[, paste("e2m2_", i, sep = "")] <- usedcars_predict_2017[, paste("errorm2_", i, sep = "")]^2
+  print(summary(usedcars_predict_2017[usedcars_predict_2017[paste("test", i, sep = "")] == 1, paste("e2m2_", i, sep = "")]))
+} 
+
+# Model 3
+model3 <- list()
+for (i in 1:5){
+  model3[[paste("M", i, sep = "")]] <- lm(data = usedcars_predict_2017[usedcars_predict_2017[, paste("train", i, sep = "")] == 1, ], lnprice ~ age + miles030 + miles30p + cityID)
+  usedcars_predict_2017[, paste("predm3_", i, sep = "")] <- predict(model3[[paste("M", i, sep = "")]], newdata = usedcars_predict_2017)
+  usedcars_predict_2017[, paste("errorm3_", i, sep = "")] <- (usedcars_predict_2017$lnprice - usedcars_predict_2017[, paste("predm3_", i, sep = "")]) * usedcars_predict_2017[, paste("test", i, sep = "")] 
+  usedcars_predict_2017[, paste("e2m3_", i, sep = "")] <- usedcars_predict_2017[, paste("errorm3_", i, sep = "")]^2
+  print(summary(usedcars_predict_2017[usedcars_predict_2017[paste("test", i, sep = "")] == 1, paste("e2m3_", i, sep = "")]))
+} 
+
+# Model 4
+model4 <- list()
+for (i in 1:5){
+  model4[[paste("M", i, sep = "")]] <- lm(data = usedcars_predict_2017[usedcars_predict_2017[, paste("train", i, sep = "")] == 1, ], lnprice ~ age:cityID + miles030:cityID + miles30p:cityID + cityID)
+  usedcars_predict_2017[, paste("predm4_", i, sep = "")] <- predict(model4[[paste("M", i, sep = "")]], newdata = usedcars_predict_2017)
+  usedcars_predict_2017[, paste("errorm4_", i, sep = "")] <- (usedcars_predict_2017$lnprice - usedcars_predict_2017[, paste("predm4_", i, sep = "")]) * usedcars_predict_2017[, paste("test", i, sep = "")] 
+  usedcars_predict_2017[, paste("e2m4_", i, sep = "")] <- usedcars_predict_2017[, paste("errorm4_", i, sep = "")]^2
+  print(summary(usedcars_predict_2017[usedcars_predict_2017[paste("test", i, sep = "")] == 1, paste("e2m4_", i, sep = "")]))
+}
+
+#############################################
+##### Non-Denver sample: evaluate for Denver
+
+# Model 1
+final_denver_1 <- lm(data = usedcars_predict_2017, lnprice ~ age + miles)
+usedcars_predict_2017$predict_denver_1 <- predict(final_denver_1)
+usedcars_predict_2017$e2_denver_1 <- (usedcars_predict_2017$lnprice - usedcars_predict_2017$predict_denver_1) ^ 2
+summary(usedcars_predict_2017$e2_denver_1[usedcars_predict_2017$city == "Denver"])
+
+# Model 2
+final_denver_2 <- lm(data = usedcars_predict_2017, lnprice ~ age + miles030 + miles30p)
+usedcars_predict_2017$predict_denver_2 <- predict(final_denver_2)
+usedcars_predict_2017$e2_denver_2 <- (usedcars_predict_2017$lnprice - usedcars_predict_2017$predict_denver_2) ^ 2
+summary(usedcars_predict_2017$e2_denver_2[usedcars_predict_2017$city == "Denver"])
+
+# Model 3
+final_denver_3 <- lm(data = usedcars_predict_2017, lnprice ~ age + miles030 + miles30p + cityID)
+usedcars_predict_2017$predict_denver_3 <- predict(final_denver_3)
+usedcars_predict_2017$e2_denver_3 <- (usedcars_predict_2017$lnprice - usedcars_predict_2017$predict_denver_3) ^ 2
+summary(usedcars_predict_2017$e2_denver_3[usedcars_predict_2017$city == "Denver"])
+
+# Model 4
+final_denver_4 <- lm(data = usedcars_predict_2017, lnprice ~ cityID:age + cityID:miles030 + cityID:miles30p + cityID)
+usedcars_predict_2017$predict_denver_4 <- predict(final_denver_4)
+usedcars_predict_2017$e2_denver_4 <- (usedcars_predict_2017$lnprice - usedcars_predict_2017$predict_denver_4) ^ 2
+summary(usedcars_predict_2017$e2_denver_4[usedcars_predict_2017$city == "Denver"])
+
+```
