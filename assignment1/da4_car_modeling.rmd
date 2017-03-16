@@ -48,7 +48,11 @@ min_max_med <- function(x) {
 }
 ```
 
-```{r todo01}
+The following code snippet takes the *miles* vector, which is split by row into data frames subsetted by the values of *city* values as factors, and function FUN is applied to each subset in turn.
+
+Results below.
+
+```{r byfunction}
 by(craigslist_data$miles, INDICES = craigslist_data$city, FUN = min_max_med)
 ```
 
@@ -86,7 +90,8 @@ min_max_n <- function(x) {
 }
 ```
 
-```{r todo3}
+The following line applies the min_max_n fuction on the 3th, 4th, 5th and 6th column (*year*, *id*, *price*, *miles*).
+```{r apply_on_4column}
 t(apply(craigslist_data[3:6], 2, min_max_n))
 ```
 
@@ -171,7 +176,9 @@ craigslist_data <- craigslist_data[which(craigslist_data$miles <= 250000),]
 ```
 
 
-```{r todo4}
+The following piece of code counts the multiple occurrences of {city, price, age, miles} quadlets.
+
+```{r freq_quadlet}
 craigslist_data <- ddply(craigslist_data,.(city, price, age, miles),transform, multiple = NROW(piece))
 craigslist_data <- craigslist_data[order(craigslist_data[,1], craigslist_data[, 2]),]
 count(craigslist_data$multiple)
