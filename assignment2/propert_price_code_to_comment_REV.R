@@ -34,6 +34,7 @@ RMSE_Lev <- function(pred, obs, na.rm = FALSE){
 #setwd("~/Desktop/12-03")
 # setwd("~/Dropbox/Dataanalysis_development_shared/projects/Stata_R/tasks/3. ingatlan_df/data")
 #setwd("C:/Users/GB/Dropbox (MTA KRTK)/Dataanalysis_development_shared/projects/Stata_R/tasks/3. ingatlan_df/data")
+
 source('da_helper_functions.R')
 
 ## Reading data file 
@@ -614,14 +615,19 @@ stargazer(list(modellog1), list(modellog2), list(modellog3), list(modellog4), li
 
 
 # CV
-
+# cross validation
+# set seed of randomization
 set.seed(201703)
+# using 5-fold crossvalidation
 k <- 5
+# creating folds
 folds <- sample(rep(1:k, nrow(property_df)/k))
+# sneak peak into folds (only 1 to 5 here)
 folds
+# number of observations in folds (equal, all 1013)
 table(folds)
 
-
+# dropping RMSE values for level models
 rmse_mlev1 <- NULL
 rmse_mlev2 <- NULL
 rmse_mlev3 <- NULL
@@ -641,7 +647,7 @@ rmse_train_mlev6 <- NULL
 rmse_train_mlev7 <- NULL
 rmse_train_mlev8 <- NULL
 
-
+# dropping RMSE values for log models
 rmse_mlog1 <- NULL
 rmse_mlog2 <- NULL
 rmse_mlog3 <- NULL
@@ -661,7 +667,7 @@ rmse_train_mlog6 <- NULL
 rmse_train_mlog7 <- NULL
 rmse_train_mlog8 <- NULL
 
-
+#dropping bic values for levels
 bic_mlev1  <- NULL
 bic_mlev2  <- NULL
 bic_mlev3  <- NULL
@@ -672,17 +678,27 @@ bic_mlev7  <- NULL
 bic_mlev8  <- NULL
 
 
-
+#RMSE calculator function for levels
 rmse_log <- function (x){
-  sqrt(mean((property_df_test$Ylev - exp(predict(x, newdata = property_df_test)) * exp((property_df_test$Ylog - predict(x, newdata = property_df_test))^2/2))^2))
+  sqrt(
+    mean(
+      (property_df_test$Ylev - exp(predict(x, newdata = property_df_test)) * 
+         exp((property_df_test$Ylog - predict(x, newdata = property_df_test))^2/2))
+      ^2)
+    )
 }
 
-
+#RMSE for log values in training set
 rmse_train_log <- function (x){
-  sqrt(mean((property_df_train$Ylev - exp(predict(x, newdata = property_df_train)) * exp((property_df_train$Ylog - predict(x, newdata = property_df_train))^2/2))^2))
+  sqrt(
+    mean(
+      (property_df_train$Ylev - exp(predict(x, newdata = property_df_train)) * 
+         exp((property_df_train$Ylog - predict(x, newdata = property_df_train))^2/2))
+      ^2)
+    )
 }
 
-
+#dropping bic values for levels
 bic_mlog1  <- NULL
 bic_mlog2  <- NULL
 bic_mlog3  <- NULL
@@ -692,88 +708,270 @@ bic_mlog6  <- NULL
 bic_mlog7  <- NULL
 bic_mlog8  <- NULL
 
+#for each eand every fold (out of k=5)
 for(i in 1:k){
+  #... the training set is every fold, which is not the actual
   property_df_train <- property_df[folds!=i,]
+  #... and the test set is the actual
   property_df_test <- property_df[folds == i,]
   
 
-  
+  # linear model with LHS is the predicted price per squaremeter level
+  # RHS is sqm and floor2
+  # RMSE is added to a vector on the i-th index for test set for model 1
+  # RMSE is added to a vector on the i-th index for training set for model 1
+  # bic is also added to a vector i-th index for model 1
   mlev1 <- lm(data = property_df_train, Ylev ~ sqm + floor2)
+  #this assignment does not work: object 'rmse_mlev1' not found
   rmse_mlev1[i] <- RMSE_Lev(pred = predict(mlev1, newdata = property_df_test), obs = property_df_test$Ylev, na.rm = TRUE)
   rmse_train_mlev1[i] <- RMSE_Lev(pred = predict(mlev1, newdata = property_df_train), obs = property_df_train$Ylev, na.rm = TRUE)
   bic_mlev1[i] <- BIC(mlev1)
 
+  # linear model with LHS is the predicted price per squaremeter level
+  # RHS is sqm below and over 60 sqm, whwther ground floor, under 6th floor or over 6th floor
+  # RMSE is added to a vector on the i-th index for test set for model 2
+  # RMSE is added to a vector on the i-th index for training set for model 2
+  # bic is also added to a vector i-th index for model 2
   mlev2 <- lm(data = property_df_train, Ylev ~ sqm_sp2060 + sqm_sp60p + floor0 + floor_sp05 + floor_sp6p)
   rmse_mlev2[i] <- RMSE_Lev(pred = predict(mlev2, newdata = property_df_test), obs = property_df_test$Ylev, na.rm = TRUE)
   rmse_train_mlev2[i] <- RMSE_Lev(pred = predict(mlev2, newdata = property_df_train), obs = property_df_train$Ylev, na.rm = TRUE)
   bic_mlev2[i] <- BIC(mlev2)
   
-  mlev3 <- lm(data = property_df_train, Ylev ~ sqm_sp2060 + sqm_sp60p + floor0 + floor_sp05 + floor_sp6p + number_of_floor + factor(condition_broad) + lift_d + hasbalcony + aircond_d + factor(heating_broad) + concrete_blockflat_d)
+  
+  # linear model with LHS is the predicted price per squaremeter level 
+  # RHS is sqm below and over 60 sqm, whwther ground floor, under 6th floor or over 6th floor
+  # also RHS is number of floors, condition (collapsed), lift dummy, balcony flag, airconditioning dummy, heating (collapsed) 
+  # and whether this is a concrete flat
+  # RMSE is added to a vector on the i-th index for test set for model 3
+  # RMSE is added to a vector on the i-th index for training set for model 3
+  # bic is also added to a vector i-th index for model 3
+  mlev3 <- lm(data = property_df_train, Ylev ~ sqm_sp2060 + sqm_sp60p + floor0 + floor_sp05 + floor_sp6p + 
+                number_of_floor + factor(condition_broad) + lift_d + hasbalcony + aircond_d + 
+                factor(heating_broad) + concrete_blockflat_d)
   rmse_mlev3[i] <- RMSE_Lev(pred = predict(mlev3, newdata = property_df_test), obs = property_df_test$Ylev, na.rm = TRUE)
   rmse_train_mlev3[i] <- RMSE_Lev(pred = predict(mlev3, newdata = property_df_train), obs = property_df_train$Ylev, na.rm = TRUE)
   bic_mlev3[i] <- BIC(mlev3)
   
-  mlev4 <- lm(data = property_df_train, Ylev ~ sqm_sp2060 + sqm_sp60p + floor0 + floor_sp05 + floor_sp6p + number_of_floor + factor(condition_broad) + lift_d + hasbalcony + aircond_d + factor(heating_broad) + concrete_blockflat_d + balconyXfloor2 + liftXfloor2 + factor(floor)*concrete_blockflat_d + factor(floor)*number_of_floor + factor(floor)*heating_broad)
+  # linear model with LHS is the predicted price per squaremeter level
+  # RHS is sqm below and over 60 sqm, whwther ground floor, under 6th floor or over 6th floor
+  # also RHS is number of floors, condition (collapsed), lift dummy, balcony flag, airconditioning dummy, heating (collapsed) 
+  # and whether this is a concrete flat
+  # plus interactions with floor
+  # RMSE is added to a vector on the i-th index for test set for model 4
+  # RMSE is added to a vector on the i-th index for training set for model 4
+  # bic is also added to a vector i-th index for model 4
+  mlev4 <- lm(data = property_df_train, Ylev ~ sqm_sp2060 + sqm_sp60p + floor0 + floor_sp05 + floor_sp6p + 
+                number_of_floor + factor(condition_broad) + lift_d + hasbalcony + aircond_d + 
+                factor(heating_broad) + concrete_blockflat_d + 
+                balconyXfloor2 + liftXfloor2 + factor(floor)*concrete_blockflat_d + 
+                factor(floor)*number_of_floor + factor(floor)*heating_broad)
   rmse_mlev4[i] <- RMSE_Lev(pred = predict(mlev4, newdata = property_df_test), obs = property_df_test$Ylev, na.rm = TRUE)
   rmse_train_mlev4[i] <- RMSE_Lev(pred = predict(mlev4, newdata = property_df_train), obs = property_df_train$Ylev, na.rm = TRUE)
   bic_mlev4[i] <- BIC(mlev4)
   
-  mlev5 <- lm(data = property_df_train, Ylev ~ new_flat*sqm_sp2060 + new_flat*sqm_sp60p + new_flat*floor0 + new_flat*floor_sp05 + new_flat*floor_sp6p + number_of_floor + factor(condition_broad) + lift_d + hasbalcony  + aircond_d + factor(heating_broad) + concrete_blockflat_d + new_flat*number_of_floor + new_flat*lift_d + new_flat*liftXfloor2 + new_flat*hasbalcony + new_flat*balconyXfloor2 + new_flat*aircond_d + new_flat*factor(heating_broad) + new_flat*concrete_blockflat_d)
+  
+  # linear model with LHS is the predicted price per squaremeter level
+  # RHS is sqm below and over 60 sqm, whwther ground floor, under 6th floor or over 6th floor
+  # also RHS is number of floors, condition (collapsed), lift dummy, balcony flag, airconditioning dummy, heating (collapsed) 
+  # and whether this is a concrete flat
+  # plus interactions with new_flat flag
+  # RMSE is added to a vector on the i-th index for test set for model 5
+  # RMSE is added to a vector on the i-th index for training set for model 5
+  # bic is also added to a vector i-th index for model 5
+  mlev5 <- lm(data = property_df_train, Ylev ~ new_flat*sqm_sp2060 + new_flat*sqm_sp60p + new_flat*floor0 + 
+                new_flat*floor_sp05 + new_flat*floor_sp6p + number_of_floor + 
+                factor(condition_broad) + lift_d + hasbalcony  + 
+                aircond_d + factor(heating_broad) + concrete_blockflat_d + 
+                new_flat*number_of_floor + new_flat*lift_d + new_flat*liftXfloor2 + 
+                new_flat*hasbalcony + new_flat*balconyXfloor2 + new_flat*aircond_d + 
+                new_flat*factor(heating_broad) + new_flat*concrete_blockflat_d)
   rmse_mlev5[i] <- RMSE_Lev(pred = predict(mlev5, newdata = property_df_test), obs = property_df_test$Ylev, na.rm = TRUE)
   rmse_train_mlev5[i] <- RMSE_Lev(pred = predict(mlev5, newdata = property_df_train), obs = property_df_train$Ylev, na.rm = TRUE)
   bic_mlev5[i] <- BIC(mlev5)
   
-  mlev6 <- lm(data = property_df_train, Ylev ~ new_flat*sqm_sp2060 + new_flat*sqm_sp60p + new_flat*floor0 + new_flat*floor_sp05 + new_flat*floor_sp6p + number_of_floor + factor(condition_broad) + lift_d + hasbalcony  + aircond_d + factor(heating_broad) + concrete_blockflat_d + factor(condition_broad)*factor(floor2) + factor(condition_broad)*number_of_floor + factor(condition_broad)*lift_d + factor(condition_broad):liftXfloor2 + factor(condition_broad)*hasbalcony + factor(condition_broad):balconyXfloor2 + factor(condition_broad)*aircond_d + factor(condition_broad)*factor(heating_broad) + factor(condition_broad)*concrete_blockflat_d + factor(condition_broad)*factor(floor2)*number_of_floor + factor(condition_broad)*factor(floor2)*factor(heating_broad) + factor(condition_broad)*factor(floor2)*concrete_blockflat_d)
+  # linear model with LHS is the predicted price per squaremeter level
+  # RHS is sqm below and over 60 sqm, whwther ground floor, under 6th floor or over 6th floor
+  # also RHS is number of floors, condition (collapsed), lift dummy, balcony flag, airconditioning dummy, heating (collapsed) 
+  # and whether this is a concrete flat
+  # plus interactions with condition
+  # RMSE is added to a vector on the i-th index for test set for model 6
+  # RMSE is added to a vector on the i-th index for training set for model 6
+  # bic is also added to a vector i-th index for model 6
+  mlev6 <- lm(data = property_df_train, Ylev ~ new_flat*sqm_sp2060 + new_flat*sqm_sp60p + 
+                new_flat*floor0 + new_flat*floor_sp05 + new_flat*floor_sp6p + number_of_floor + 
+                factor(condition_broad) + lift_d + hasbalcony  + aircond_d + factor(heating_broad) + 
+                concrete_blockflat_d + factor(condition_broad)*factor(floor2) + 
+                factor(condition_broad)*number_of_floor + factor(condition_broad)*lift_d + 
+                factor(condition_broad):liftXfloor2 + factor(condition_broad)*hasbalcony + 
+                factor(condition_broad):balconyXfloor2 + factor(condition_broad)*aircond_d + 
+                factor(condition_broad)*factor(heating_broad) + 
+                factor(condition_broad)*concrete_blockflat_d + 
+                factor(condition_broad)*factor(floor2)*number_of_floor + 
+                factor(condition_broad)*factor(floor2)*factor(heating_broad) + 
+                factor(condition_broad)*factor(floor2)*concrete_blockflat_d)
   rmse_mlev6[i] <- RMSE_Lev(pred = predict(mlev6, newdata = property_df_test), obs = property_df_test$Ylev, na.rm = TRUE)
   rmse_train_mlev6[i] <- RMSE_Lev(pred = predict(mlev6, newdata = property_df_train), obs = property_df_train$Ylev, na.rm = TRUE)
   bic_mlev6[i] <- BIC(mlev6)
   
-  mlev7 <- lm(data = property_df_train, Ylev ~ new_flat*factor(sqmcut) + number_of_floor + factor(condition_broad) + lift_d + hasbalcony  + aircond_d + factor(heating_broad) + concrete_blockflat_d + factor(condition_broad)*factor(floor2) + factor(condition_broad)*number_of_floor + factor(condition_broad)*lift_d + factor(condition_broad)*liftXfloor2 + factor(condition_broad)*hasbalcony + factor(condition_broad)*balconyXfloor2 + factor(condition_broad)*aircond_d + factor(condition_broad)*factor(heating_broad) + factor(condition_broad)*concrete_blockflat_d + factor(condition_broad)*factor(floor2)*number_of_floor + factor(condition_broad)*factor(floor2) * factor(heating_broad) + factor(condition_broad)*factor(floor2)*concrete_blockflat_d)
+  
+  # linear model with LHS is the predicted price per squaremeter level
+  # RHS is using sqm manual bins instead of the values, whwther ground floor, under 6th floor or over 6th floor
+  # also RHS is number of floors, condition (collapsed), lift dummy, balcony flag, airconditioning dummy, heating (collapsed) 
+  # and whether this is a concrete flat
+  # plus interactions with condition
+  # RMSE is added to a vector on the i-th index for test set for model 7
+  # RMSE is added to a vector on the i-th index for training set for model 7
+  # bic is also added to a vector i-th index for model 7
+  mlev7 <- lm(data = property_df_train, Ylev ~ new_flat*factor(sqmcut) + number_of_floor + 
+                factor(condition_broad) + lift_d + hasbalcony  + aircond_d + 
+                factor(heating_broad) + concrete_blockflat_d + 
+                factor(condition_broad)*factor(floor2) + 
+                factor(condition_broad)*number_of_floor + factor(condition_broad)*lift_d + 
+                factor(condition_broad)*liftXfloor2 + factor(condition_broad)*hasbalcony + 
+                factor(condition_broad)*balconyXfloor2 + factor(condition_broad)*aircond_d + 
+                factor(condition_broad)*factor(heating_broad) + factor(condition_broad)*concrete_blockflat_d + 
+                factor(condition_broad)*factor(floor2)*number_of_floor + factor(condition_broad)*factor(floor2) * factor(heating_broad) + factor(condition_broad)*factor(floor2)*concrete_blockflat_d)
   rmse_mlev7[i] <- RMSE_Lev(pred = predict(mlev7, newdata = property_df_test), obs = property_df_test$Ylev, na.rm = TRUE)
   rmse_train_mlev7[i] <- RMSE_Lev(pred = predict(mlev7, newdata = property_df_train), obs = property_df_train$Ylev, na.rm = TRUE)
   bic_mlev7[i] <- BIC(mlev7)
   
-  mlev8 <- lm(data = property_df_train, Ylev ~ new_flat*factor(sqmcut) + number_of_floor + factor(condition_broad) + lift_d + hasbalcony  + aircond_d + factor(heating_broad) + concrete_blockflat_d + factor(condition_broad)*factor(floor) + factor(condition_broad)*number_of_floor + factor(condition_broad)*lift_d + factor(condition_broad)*liftXfloor2 + factor(condition_broad)*hasbalcony + factor(condition_broad)*balconyXfloor2 + factor(condition_broad)*aircond_d + factor(condition_broad)*factor(heating_broad) + factor(condition_broad)*concrete_blockflat_d + factor(condition_broad)*factor(floor)*number_of_floor + factor(condition_broad)*factor(floor) * factor(heating_broad) + factor(condition_broad)*factor(floor)*concrete_blockflat_d)
+  
+  # linear model with LHS is the predicted price per squaremeter level
+  # RHS is using sqm manual bins instead of the values, whwther ground floor, under 6th floor or over 6th floor
+  # also RHS is number of floors, condition (collapsed), lift dummy, balcony flag, airconditioning dummy, heating (collapsed) 
+  # and whether this is a concrete flat
+  # plus interactions with condition
+  # interactions with floor instead of floor2
+  # RMSE is added to a vector on the i-th index for test set for model 8
+  # RMSE is added to a vector on the i-th index for training set for model 8
+  # bic is also added to a vector i-th index for model 8
+  mlev8 <- lm(data = property_df_train, Ylev ~ new_flat*factor(sqmcut) + number_of_floor + 
+                factor(condition_broad) + lift_d + hasbalcony  + aircond_d + factor(heating_broad) + 
+                concrete_blockflat_d + factor(condition_broad)*factor(floor) + 
+                factor(condition_broad)*number_of_floor + factor(condition_broad)*lift_d + 
+                factor(condition_broad)*liftXfloor2 + factor(condition_broad)*hasbalcony + 
+                factor(condition_broad)*balconyXfloor2 + factor(condition_broad)*aircond_d + 
+                factor(condition_broad)*factor(heating_broad) + 
+                factor(condition_broad)*concrete_blockflat_d + 
+                factor(condition_broad)*factor(floor)*number_of_floor + 
+                factor(condition_broad)*factor(floor) * factor(heating_broad) + 
+                factor(condition_broad)*factor(floor)*concrete_blockflat_d)
   rmse_mlev8[i] <- RMSE_Lev(pred = predict(mlev8, newdata = property_df_test), obs = property_df_test$Ylev, na.rm = TRUE)
   rmse_train_mlev8[i] <- RMSE_Lev(pred = predict(mlev8, newdata = property_df_train), obs = property_df_train$Ylev, na.rm = TRUE)
   bic_mlev8[i] <- BIC(mlev8) 
   
-
+  # linear model with LHS is the predicted price per squaremeter log
+  # RHS is log sqm and floor2
+  # RMSE is added to a vector on the i-th index for test set for model 1
+  # RMSE is added to a vector on the i-th index for training set for model 1
+  # bic is also added to a vector i-th index for model 1
     mlog1 <- lm(data = property_df_train, Ylog ~ ln_sqm + floor2)
     rmse_mlog1[i] <- rmse_log(mlog1)
     rmse_train_mlog1[i] <- rmse_train_log(mlog1)
     bic_mlog1[i]  <- BIC(mlog1)
     
+    # linear model with LHS is the predicted price per squaremeter log
+    # RHS is log sqm below and log over 60 sqm, whwther ground floor, under 6th floor or over 6th floor
+    # RMSE is added to a vector on the i-th index for test set for model 2
+    # RMSE is added to a vector on the i-th index for training set for model 2
+    # bic is also added to a vector i-th index for model 2
     mlog2 <- lm(data = property_df_train, Ylog ~ lnsqm_sp2060 + lnsqm_sp60p + floor0 + floor_sp05 + floor_sp6p)
     rmse_mlog2[i] <- rmse_log(mlog2)
     rmse_train_mlog2[i] <- rmse_train_log(mlog2)
     bic_mlog2[i]  <- BIC(mlog2)
     
+    # linear model with LHS is the predicted price per squaremeter log
+    # RHS is log sqm below and log over 60 sqm, whwther ground floor, under 6th floor or over 6th floor
+    # also RHS is number of floors, condition (collapsed), lift dummy, balcony flag, airconditioning dummy, heating (collapsed) 
+    # and whether this is a concrete flat
+    # plus interactions with floor
+    # RMSE is added to a vector on the i-th index for test set for model 4
+    # RMSE is added to a vector on the i-th index for training set for model 4
+    # bic is also added to a vector i-th index for model 4
     mlog3 <- lm(data = property_df_train, Ylog ~ lnsqm_sp2060 + lnsqm_sp60p + floor0 + floor_sp05 + floor_sp6p + number_of_floor + factor(condition_broad) + lift_d + hasbalcony + aircond_d + factor(heating_broad) + concrete_blockflat_d)
     rmse_mlog3[i] <- rmse_log(mlog3)
     rmse_train_mlog3[i] <- rmse_train_log(mlog3)
     bic_mlog3[i]  <- BIC(mlog3)
     
-    mlog4 <- lm(data = property_df_train, Ylog ~ lnsqm_sp2060 + lnsqm_sp60p + floor0 + floor_sp05 + floor_sp6p + number_of_floor + factor(condition_broad) + lift_d + hasbalcony + aircond_d + factor(heating_broad) + concrete_blockflat_d + balconyXfloor2 + liftXfloor2 + factor(floor)*concrete_blockflat_d + factor(floor)*number_of_floor + factor(floor)*heating_broad)
+    # linear model with LHS is the predicted price per squaremeter log
+    # RHS is log sqm below and log over 60 sqm, whether ground floor, under 6th floor or over 6th floor
+    # also RHS is number of floors, condition (collapsed), lift dummy, balcony flag, airconditioning dummy, heating (collapsed) 
+    # and whether this is a concrete flat
+    # plus interactions with floor
+    # RMSE is added to a vector on the i-th index for test set for model 4
+    # RMSE is added to a vector on the i-th index for training set for model 4
+    # bic is also added to a vector i-th index for model 4
+    mlog4 <- lm(data = property_df_train, Ylog ~ lnsqm_sp2060 + lnsqm_sp60p + floor0 + floor_sp05 + 
+                  floor_sp6p + number_of_floor + factor(condition_broad) + 
+                  lift_d + hasbalcony + aircond_d + factor(heating_broad) + 
+                  concrete_blockflat_d + balconyXfloor2 + 
+                  liftXfloor2 + factor(floor)*concrete_blockflat_d + factor(floor)*number_of_floor + 
+                  factor(floor)*heating_broad)
     rmse_mlog4[i] <- rmse_log(mlog4)
     rmse_train_mlog4[i] <- rmse_train_log(mlog4)
     bic_mlog4[i]  <- BIC(mlog4)
     
+    # linear model with LHS is the predicted price per squaremeter log
+    # RHS is log sqm below and log over 60 sqm, whwther ground floor, under 6th floor or over 6th floor
+    # also RHS is number of floors, condition (collapsed), lift dummy, balcony flag, airconditioning dummy, heating (collapsed) 
+    # and whether this is a concrete flat
+    # plus interactions with new_flat flag
+    # RMSE is added to a vector on the i-th index for test set for model 5
+    # RMSE is added to a vector on the i-th index for training set for model 5
+    # bic is also added to a vector i-th index for model 5
     mlog5 <- lm(data = property_df_train, Ylog ~ new_flat*lnsqm_sp2060 + new_flat*lnsqm_sp60p + new_flat*floor0 + new_flat*floor_sp05 + new_flat*floor_sp6p + number_of_floor + factor(condition_broad) + lift_d + hasbalcony + aircond_d + factor(heating_broad) + concrete_blockflat_d + new_flat:number_of_floor + new_flat:lift_d + new_flat*liftXfloor2 + new_flat:hasbalcony + new_flat*balconyXfloor2 + new_flat:aircond_d + new_flat:factor(heating_broad) + new_flat:concrete_blockflat_d)
     rmse_mlog5[i] <- rmse_log(mlog5)
     rmse_train_mlog5[i] <- rmse_train_log(mlog5)
     bic_mlog5[i]  <- BIC(mlog5)
     
-    mlog6 <- lm(data = property_df_train, Ylog ~ new_flat*lnsqm_sp2060 + new_flat*lnsqm_sp60p + new_flat*floor0 + new_flat*floor_sp05 + new_flat*floor_sp6p + number_of_floor + factor(condition_broad) + lift_d + hasbalcony + aircond_d + factor(heating_broad) + concrete_blockflat_d + factor(condition_broad):factor(floor2) + factor(condition_broad):number_of_floor + factor(condition_broad):lift_d + factor(condition_broad):liftXfloor2 + factor(condition_broad):hasbalcony + factor(condition_broad):balconyXfloor2 + factor(condition_broad):aircond_d + factor(condition_broad):factor(heating_broad) + factor(condition_broad):concrete_blockflat_d + factor(condition_broad):factor(floor2):number_of_floor + factor(condition_broad):factor(floor2):factor(heating_broad) + factor(condition_broad):factor(floor2):concrete_blockflat_d)
+    # linear model with LHS is the predicted price per squaremeter log
+    # RHS is log sqm below and log over 60 sqm, whwther ground floor, under 6th floor or over 6th floor
+    # also RHS is number of floors, condition (collapsed), lift dummy, balcony flag, airconditioning dummy, heating (collapsed) 
+    # and whether this is a concrete flat
+    # plus interactions with condition
+    # RMSE is added to a vector on the i-th index for test set for model 6
+    # RMSE is added to a vector on the i-th index for training set for model 6
+    # bic is also added to a vector i-th index for model 6
+    mlog6 <- lm(data = property_df_train, Ylog ~ new_flat*lnsqm_sp2060 + new_flat*lnsqm_sp60p + 
+                  new_flat*floor0 + new_flat*floor_sp05 + new_flat*floor_sp6p + 
+                  number_of_floor + factor(condition_broad) + lift_d + hasbalcony + 
+                  aircond_d + factor(heating_broad) + concrete_blockflat_d + 
+                  factor(condition_broad):factor(floor2) + 
+                  factor(condition_broad):number_of_floor + 
+                  factor(condition_broad):lift_d + factor(condition_broad):liftXfloor2 + 
+                  factor(condition_broad):hasbalcony + factor(condition_broad):balconyXfloor2 + 
+                  factor(condition_broad):aircond_d + factor(condition_broad):factor(heating_broad) + 
+                  factor(condition_broad):concrete_blockflat_d + 
+                  factor(condition_broad):factor(floor2):number_of_floor + 
+                  factor(condition_broad):factor(floor2):factor(heating_broad) + 
+                  factor(condition_broad):factor(floor2):concrete_blockflat_d)
     rmse_mlog6[i] <- rmse_log(mlog6)
     rmse_train_mlog6[i] <- rmse_train_log(mlog6)
     bic_mlog6[i]  <- BIC(mlog6)
     
+    # linear model with LHS is the predicted price per squaremeter log
+    # RHS is using log sqm manual bins instead of the values, whwther ground floor, under 6th floor or over 6th floor
+    # also RHS is number of floors, condition (collapsed), lift dummy, balcony flag, airconditioning dummy, heating (collapsed) 
+    # and whether this is a concrete flat
+    # plus interactions with condition
+    # RMSE is added to a vector on the i-th index for test set for model 7
+    # RMSE is added to a vector on the i-th index for training set for model 7
+    # bic is also added to a vector i-th index for model 7
     mlog7 <- lm(data = property_df_train, Ylog ~ new_flat*lnsqmcut + number_of_floor + factor(condition_broad) + lift_d + hasbalcony + aircond_d + factor(heating_broad) + concrete_blockflat_d + factor(condition_broad):factor(floor2) + factor(condition_broad):number_of_floor + factor(condition_broad):lift_d + factor(condition_broad):liftXfloor2 + factor(condition_broad):hasbalcony + factor(condition_broad):balconyXfloor2 + factor(condition_broad):aircond_d + factor(condition_broad):factor(heating_broad) + factor(condition_broad):concrete_blockflat_d + factor(condition_broad):factor(floor2):number_of_floor + factor(condition_broad):factor(floor2):factor(heating_broad) + factor(condition_broad):factor(floor2):concrete_blockflat_d)
     rmse_mlog7[i] <- rmse_log(mlog7)
     rmse_train_mlog7[i] <- rmse_train_log(mlog7)
     bic_mlog7[i]  <- BIC(mlog7)
     
+    
+    # linear model with LHS is the predicted price per squaremeter log
+    # RHS is using log sqm manual bins instead of the values, whwther ground floor, under 6th floor or over 6th floor
+    # also RHS is number of floors, condition (collapsed), lift dummy, balcony flag, airconditioning dummy, heating (collapsed) 
+    # and whether this is a concrete flat
+    # plus interactions with condition
+    # interactions with floor instead of floor2
+    # RMSE is added to a vector on the i-th index for test set for model 8
+    # RMSE is added to a vector on the i-th index for training set for model 8
+    # bic is also added to a vector i-th index for model 8
     mlog8 <- lm(data = property_df_train, Ylog ~ new_flat*lnsqmcut + number_of_floor + factor(condition_broad) + lift_d + hasbalcony + aircond_d + factor(heating_broad) + concrete_blockflat_d + factor(condition_broad)*factor(floor) + factor(condition_broad)*number_of_floor + factor(condition_broad)*lift_d + factor(condition_broad)*liftXfloor2 + factor(condition_broad)*hasbalcony + factor(condition_broad)*balconyXfloor2 + factor(condition_broad)*aircond_d + factor(condition_broad)*factor(heating_broad) + factor(condition_broad)*concrete_blockflat_d + factor(condition_broad)*factor(floor)*number_of_floor + factor(condition_broad)*factor(floor)*factor(heating_broad) + factor(condition_broad)*factor(floor)*concrete_blockflat_d)
     rmse_mlog8[i] <- rmse_log(mlog8)
     rmse_train_mlog8[i] <- rmse_train_log(mlog8)
@@ -781,12 +979,15 @@ for(i in 1:k){
 }
 
 
-
-models_lev_rmse <- data.frame(matrix(, nrow=5, ncol=8)) 
+#organizing RMSE into a data frame
+#here the code is broken, most possibly because of the extra comma
+models_lev_rmse <- data.frame(matrix(, nrow=5, ncol=8))
+#assigning colnames
 colnames(models_lev_rmse) <- c("Model 1", "Model 2", "Model 3", "Model 4", "Model 5", "Model 6", "Model 7", "Model 8")
+#assigning rownames
 rownames(models_lev_rmse) <- c("BIC", "RMSEin", "RMSEtestCV", "RMSEtest1", "RMSE_max")
 
-
+#calculating RMSE from the mean of the bic and rmse vectors for all 8 level models
 models_lev_rmse[,1] <- c(mean(bic_mlev1), mean(rmse_train_mlev1), mean(rmse_mlev1), rmse_mlev1[1], max(rmse_mlev1))
 models_lev_rmse[,2] <- c(mean(bic_mlev2), mean(rmse_train_mlev2), mean(rmse_mlev2), rmse_mlev2[1], max(rmse_mlev2))
 models_lev_rmse[,3] <- c(mean(bic_mlev3), mean(rmse_train_mlev3), mean(rmse_mlev3), rmse_mlev3[1], max(rmse_mlev3))
@@ -796,15 +997,17 @@ models_lev_rmse[,6] <- c(mean(bic_mlev6), mean(rmse_train_mlev6), mean(rmse_mlev
 models_lev_rmse[,7] <- c(mean(bic_mlev7), mean(rmse_train_mlev7), mean(rmse_mlev7), rmse_mlev7[1], max(rmse_mlev7))
 models_lev_rmse[,8] <- c(mean(bic_mlev8), mean(rmse_train_mlev8), mean(rmse_mlev8), rmse_mlev8[1], max(rmse_mlev8))
 
-
+#checking on the matrix
 models_lev_rmse
 
-
+#organizing results to another matrix, error here as well, hopefully clarified on seminar
 models_log_rmse <- data.frame(matrix(, nrow=5, ncol=9)) 
+#assigning column names
 colnames(models_log_rmse) <- c("Model 1", "Model 2", "Model 3", "Model 4", "Model 5", "Model 6", "Model 7", "Model 8", "Model 8 (w/o 1st set)")
+#assigning row names
 rownames(models_log_rmse) <- c("BIC", "RMSEin", "RMSEtestCV", "RMSEtest1", "RMSE_max")
 
-
+#calculating RMSE from the mean of the bic and rmse vectors for all 8 log models
 models_log_rmse[,1] <- c(mean(bic_mlog1), mean(rmse_train_mlog1), mean(rmse_mlog1), rmse_mlog1[1], max(rmse_mlog1))
 models_log_rmse[,2] <- c(mean(bic_mlog2), mean(rmse_train_mlog2), mean(rmse_mlog2), rmse_mlog2[1], max(rmse_mlog2))
 models_log_rmse[,3] <- c(mean(bic_mlog3), mean(rmse_train_mlog3), mean(rmse_mlog3), rmse_mlog3[1], max(rmse_mlog3))
@@ -815,38 +1018,50 @@ models_log_rmse[,7] <- c(mean(bic_mlog7), mean(rmse_train_mlog7), mean(rmse_mlog
 models_log_rmse[,8] <- c(mean(bic_mlog8), mean(rmse_train_mlog8), mean(rmse_mlog8), rmse_mlog8[1], max(rmse_mlog8))
 models_log_rmse[,9] <- c(mean(bic_mlog8), mean(rmse_train_mlog8), mean(rmse_mlog8[2:5]), rmse_mlog8[2], max(rmse_mlog8[2:5]))
 
-
+#checking matrix
 models_log_rmse
 
-
+#summary statistics for the values of predicsted price per squarementer for 5th fold
 summary(property_df[folds == 5,"Ylev"])
 
-
+#linear model for the other 4 folds, with log price for sqm, and log sqm values for below and over 60sqm
 logmod4 <- lm(data = property_df[folds != 5,], Ylog ~ lnsqm_sp2060 + lnsqm_sp60p + floor0 + floor_sp05 + floor_sp6p + number_of_floor + factor(condition_broad) + lift_d + hasbalcony + aircond_d + factor(heating_broad) + concrete_blockflat_d + balconyXfloor2 + liftXfloor2 + factor(floor)*concrete_blockflat_d + factor(floor)*number_of_floor + factor(floor)*heating_broad)
+#linear model for the other 4 folds, with level price for sqm, and level sqm values for below and over 60sqm
 levmod4 <- lm(data = property_df[folds != 5,], Ylev ~ sqm_sp2060 + sqm_sp60p + floor0 + floor_sp05 + floor_sp6p + number_of_floor + factor(condition_broad) + lift_d + hasbalcony + aircond_d + factor(heating_broad) + concrete_blockflat_d + balconyXfloor2 + liftXfloor2 + factor(floor)*concrete_blockflat_d + factor(floor)*number_of_floor + factor(floor)*heating_broad)
 
+#predicted values on fold 5 for log
 ylog_m4_t5 <- exp(predict(logmod4, newdata = property_df[folds == 5,]))
+#error of the prediction on 5th fold
 elog_m4_t5 <- ylog_m4_t5 - property_df[folds == 5, "Ylev"]
+#predicted values on fold 5 for level model
 ylev_m4_t5 <- predict(levmod4, newdata = property_df[folds == 5,])
 
-data_graphs_results <- as.data.frame(cbind(ylog_m4_t5, elog_m4_t5, ylev_m4_t5, Ylev = property_df[folds == 5, "Ylev"]))
+#input for model error visualization
+data_graphs_results <- as.data.frame(cbind(ylog_m4_t5, 
+                                           elog_m4_t5, 
+                                           ylev_m4_t5, 
+                                           Ylev = property_df[folds == 5, "Ylev"]))
 
-
+#visualizing model error on a scatterplot, x=predicted value for logs, y residual error
 png(filename="scatter_res4.png", res = 200, width = 1200, height = 800)
 ggplot(data = data_graphs_results, aes(x = ylog_m4_t5, y =  elog_m4_t5)) +
   geom_point(size = 2.5, colour = "black")
 dev.off()
 
-
+#visualizing model error on a scatterplot, x=predicted value for logs, 
+#only for y residual error > -500 values
 png(filename="scatter_res4_upd.png", res = 200, width = 1200, height = 800)
 ggplot(data = data_graphs_results[elog_m4_t5 > -500,], aes(x = ylog_m4_t5, y =  elog_m4_t5)) +
   geom_point(size = 2.5, colour = "black")
 dev.off()
 
-
+#plotting true vs predicted values, prediction linear fit with green line, using log model
 g <- ggplot(data = data_graphs_results, aes(x = Ylev, y =  ylog_m4_t5)) +
-    geom_point(shape = 1, colour = "blue") + geom_smooth(method=lm, se=FALSE, colour = "green", size = 3.5, linetype = 2) 
+    geom_point(shape = 1, colour = "blue") + 
+  geom_smooth(method=lm, se=FALSE, colour = "green", size = 3.5, linetype = 2) 
 
+#plotting true vs predicted values, prediction linear fit with green line, using log model
+# and adding level model points and line
 g <- g + geom_point(data = data_graphs_results, aes(x = Ylev, y =  ylev_m4_t5), shape = 4, colour = "red") +
      geom_smooth(method=lm, se=FALSE, colour = "orange") + geom_vline(xintercept = mean(data_graphs_results$Ylev)) +
      ylab("Fitted values") + xlab("True values")
@@ -855,25 +1070,42 @@ png(filename="log_vs_lin_all.png", res = 200, width = 1200, height = 800)
 plot(g)
 dev.off()
 
-
+#prediction standard deviation
 YlevSD <- sd(data_graphs_results$Ylev)
+#prediction mean
 YlevMEAN <- mean(data_graphs_results$Ylev)
 
-g <- ggplot(data = data_graphs_results[data_graphs_results$Ylev >= YlevMEAN - 2*YlevSD & data_graphs_results$Ylev <= YlevMEAN + 2*YlevSD,], aes(x = Ylev, y =  ylog_m4_t5)) +
-  geom_point(shape = 1, colour = "blue") + geom_smooth(method=lm, se=FALSE, colour = "green", size = 3.5, linetype = 2) 
+#plotting only observations where the predicted level value is within the plusminus
+# 2SE distance from mean (CI=95%) on the ylevel predictions on x axis and log model prediction on y
+g <- ggplot(data = data_graphs_results[data_graphs_results$Ylev >= YlevMEAN - 2*YlevSD & 
+                                         data_graphs_results$Ylev <= YlevMEAN + 2*YlevSD,], 
+            aes(x = Ylev, y =  ylog_m4_t5)) +
+  geom_point(shape = 1, colour = "blue") + 
+  geom_smooth(method=lm, se=FALSE, colour = "green", size = 3.5, linetype = 2) 
 
-g <- g + geom_point(data = data_graphs_results[data_graphs_results$Ylev >= YlevMEAN - 2*YlevSD & data_graphs_results$Ylev <= YlevMEAN + 2*YlevSD,], aes(x = Ylev, y =  ylev_m4_t5), shape = 4, colour = "red") +
-  geom_smooth(method=lm, se=FALSE, colour = "orange") + geom_vline(xintercept = mean(data_graphs_results$Ylev)) +
+#plotting only observations where the predicted level value is within the plusminus
+# 2SE distance from mean (CI=95%) on the ylevel predictions on x axis and log model prediction on y
+# and adding the pointd of the level model with red, plus fitted line with orange
+g <- g + geom_point(data = data_graphs_results[data_graphs_results$Ylev >= YlevMEAN - 2*YlevSD & 
+                                                 data_graphs_results$Ylev <= YlevMEAN + 2*YlevSD,], 
+                    aes(x = Ylev, y =  ylev_m4_t5), shape = 4, colour = "red") +
+  geom_smooth(method=lm, se=FALSE, colour = "orange") + 
+  geom_vline(xintercept = mean(data_graphs_results$Ylev)) +
   ylab("Fitted values") + xlab("True values")
 
 png(filename="log_vs_lin.png", res = 200, width = 1200, height = 800)
 plot(g)
 dev.off()
 
-
+#plotting only observations where the predicted level value is within the plusminus
+# 2SE distance from mean (CI=95%) on the ylevel predictions on x axis and log model prediction on y
+# additionally plotting the 45ndegree with label
 png(filename="log_vs_45.png", res = 200, width = 1500, height = 1000)
-ggplot(data = data_graphs_results[data_graphs_results$Ylev >= YlevMEAN - 2*YlevSD & data_graphs_results$Ylev <= YlevMEAN + 2*YlevSD,], aes(x = Ylev, y =  ylog_m4_t5)) +
-        geom_point(shape = 1, colour = "blue") + geom_smooth(method=lm, se=FALSE, colour = "green", size = 2, linetype = 2) + geom_line(aes(x = Ylev, y =  Ylev), colour = "red") +
+ggplot(data = data_graphs_results[data_graphs_results$Ylev >= YlevMEAN - 2*YlevSD & 
+                                    data_graphs_results$Ylev <= YlevMEAN + 2*YlevSD,], 
+       aes(x = Ylev, y =  ylog_m4_t5)) +
+        geom_point(shape = 1, colour = "blue") + 
+  geom_smooth(method=lm, se=FALSE, colour = "green", size = 2, linetype = 2) + geom_line(aes(x = Ylev, y =  Ylev), colour = "red") +
         annotate("text", x = 740, y = 800, label = "45 degree line", colour = "red", size = 3) +
         annotate("text", x = 850, y = 700, label = "Fitted values", colour = "green", size = 3)
 dev.off() 
