@@ -1,3 +1,4 @@
+rm(list=ls())
 library(moments)
 library(plyr)
 library(data.table)
@@ -15,7 +16,7 @@ library(stats)
 RMSE_Lev <- function(pred, obs, na.rm = FALSE){
   sqrt(mean((obs - pred)^2, na.rm = na.rm))
 }
-setwd("C:\\Users\\csorn\\Documents\\edu\\ceu\\da\\da4\\term")
+
 
 source('da_helper_functions.R')
 
@@ -211,15 +212,31 @@ dev.off()
 
 #plotting the linear smoothing trendline log psqm over log sqm 
 #for only those flats, where size is below 180 sqm
-png(filename="Graph_lp3.png", res = 200, width = 1200, height = 800)
+png(filename="Graph_logprice_logarea.png", res = 200, width = 800, height = 800)
 ggplot(data = property_df[property_df$sqm < 180,], 
-       aes(x = ln_sqm, y = ln_psqm)) + geom_smooth()
+       aes(x = ln_sqm, y = ln_psqm)) + 
+    labs(
+      title='Dependency between log flat size\nand log price per squaremeter',
+      y='Log price per squaremeter',
+      x='Log area (squaremeter)',
+      caption='Flat sizes over 180 sqm are excluded from analysis'
+    )+
+    theme_bw()+
+    geom_smooth(colour = "darkred")
 dev.off()
 
 #plotting the linear smoothing trendline  psqm over  sqm 
 #for only those flats, where size is below 180 sqm
-png(filename="Graph_lp4.png", res = 200, width = 1200, height = 800)
-ggplot(data = property_df[property_df$sqm < 180,], aes(x = sqm, y = psqm)) + geom_smooth() 
+png(filename="Graph_lev_lev.png", res = 200, width = 800, height = 800)
+ggplot(data = property_df[property_df$sqm < 180,], aes(x = sqm, y = psqm))+
+labs(
+  title='Dependency between flat size\nand price per squaremeter',
+  y='price per squaremeter',
+  x='area (squaremeter)',
+  caption='Flat sizes over 180 sqm are excluded from analysis'
+)+
+  theme_bw()+
+  geom_smooth(colour = "darkred")
 dev.off()
 
 #dropping all observations, where the flat size is smaller than 180 sqm
@@ -345,6 +362,43 @@ property_df$view <- factor(property_df$view, levels = c("NA", "court view", "gar
 #...successfully
 ddply(property_df, .(view), summarize, freq = length(view), mean_psqm = round(mean(psqm), digits = 3))
 
+####################################################
+##Engineering new variables
+
+#frequency table of orientation
+ddply(property_df, .(orientation), summarize, freq = length(orientation), 
+      mean_psqm = round(mean(psqm), digits = 3))
+
+#here the only thing to be done is factoring in NA
+property_df$orientation <- as.character(property_df$orientation)
+
+property_df$orientation[is.na(property_df$orientation)] <- "unknown"
+property_df$orientation <- factor(property_df$orientation, levels = 
+                                    c("unknown", "East", "North", "North-East", "North-West",
+                                      "South","South-East", "South-West", "West"))
+
+#...successfully
+ddply(property_df, .(orientation), summarize, freq = length(orientation), 
+      mean_psqm = round(mean(psqm), digits = 3))
+
+#frequency table of parking
+ddply(property_df, .(parking), summarize, freq = length(parking), 
+      mean_psqm = round(mean(psqm), digits = 3))
+
+#here the only thing to be done is factoring in NA
+property_df$parking <- as.character(property_df$parking)
+
+property_df$parking[is.na(property_df$parking)] <- "unknown"
+property_df$parking <- factor(property_df$parking, levels = 
+                                    c("unknown", "garage- for sale", "garage- included in the price", 
+                                      "on street parking - for pay", "on street parking -for free",
+                                      "outdoor parking spot- for sale","outdoor parking spot- included in the price", 
+                                      "parking space in undergound garage- for sale", 
+                                      "parking space in underground garage- included in the price"))
+
+#...successfully
+ddply(property_df, .(parking), summarize, freq = length(parking), 
+      mean_psqm = round(mean(psqm), digits = 3))
 
 #################################################
 # Create test and train samples, cross-validation
