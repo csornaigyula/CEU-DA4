@@ -460,6 +460,8 @@ RMSE_Log <- function(pred, obs, na.rm = TRUE){
 }
 
 
+
+
 RMSE01 <- round(
   RMSE_Log(
     pred = predict(
@@ -572,5 +574,306 @@ ggplot(data=vizmat)+
   theme_bw()
 dev.off()
 
-#SECTION
+#SECTION3: Out of sample multiple regression with interactions with
+# 1- lift
+# 2- new flat
+# 3- using liftXfloor2 already interacted variable
+osreg06 <- lm(data = property_df[property_df$train == 1,], 
+              psqm ~ sqm_sp2060 + sqm_sp60p +  heating_broad + 
+                condition_broad+
+                parking+  hasbalcony+ concrete_blockflat_d+
+                floor_sp05+floor_sp6p+ view+ balcony+lift_d+aircond_d+
+                liftXfloor2+
+                floor_sp05*lift_d+floor_sp6p*lift_d+
+                new_flat*hasbalcony+new_flat*aircond_d+new_flat*view+
+                  new_flat*sqm_sp2060+new_flat*sqm_sp60p)
+stargazer_r( list(osreg06, osreg05, osreg03), 
+             digits=2,single.row = TRUE, out="osreg060503.html")
+
+RMSE06 <- round(
+  RMSE_Lev(
+    pred = predict(
+      osreg06, newdata = property_df[property_df$train == 0,]
+    ), 
+    obs = property_df$psqm[property_df$train == 0], 
+    na.rm = TRUE), digits = 3)
+
+predv <- predict(
+  osreg06, newdata = property_df[property_df$train == 0,]
+)
+errv <- (predv - obsv)
+
+sqmvm <-matrix(sqmv, nrow=length(sqmv), ncol=1)
+errvm <-matrix(errv, nrow=length(errv), ncol=1)
+
+vizmat <- cbind(sqmvm,errvm)
+colnames(vizmat) <- c("sqm", "err")
+vizmat <-data.frame(vizmat)
+
+png(filename="Errdistr_oosample_interact.png", res = 200, width = 800, height = 800)
+ggplot(data=vizmat)+
+  aes( x=sqm,y=err)+
+  geom_point(size = 1, colour = "indianred")+
+  labs(
+    title='Distribution of residual error\nper squaremeter',
+    subtitle='Out of sample multiple regression\n w/ interactions',
+    y='Difference between predicted\nand observed price',
+    x='area (squaremeter)'
+  )+
+  theme_bw()
+dev.off()
+
+mean(property_df$psqm)
+property_df$lnpsqm <- log(property_df$psqm)
+
+#SECTION4: Even more interactions, log function
+osreg07 <- lm(data = property_df[property_df$train == 1,], 
+              ln_psqm ~ new_flat*lnsqm_sp2060 + new_flat*lnsqm_sp60p + 
+              new_flat*floor0 + new_flat*floor_sp05 + new_flat*floor_sp6p + 
+              number_of_floor + factor(condition_broad) + lift_d + hasbalcony + 
+              aircond_d + factor(heating_broad) + concrete_blockflat_d + 
+              factor(orientation)+factor(view)+factor(parking)+
+              factor(condition_broad):factor(floor2) + 
+              factor(condition_broad):number_of_floor + 
+              factor(condition_broad):lift_d + factor(condition_broad):liftXfloor2 + 
+              factor(condition_broad):hasbalcony + factor(condition_broad):balconyXfloor2 + 
+              factor(condition_broad):aircond_d + factor(condition_broad):factor(heating_broad) + 
+              factor(condition_broad):concrete_blockflat_d + 
+              factor(condition_broad):factor(floor2):number_of_floor + 
+              factor(condition_broad):factor(floor2):factor(heating_broad) + 
+              factor(condition_broad):factor(floor2):concrete_blockflat_d +
+              factor(condition_broad):factor(view):factor(floor2)+
+              factor(condition_broad):factor(floor2):factor(parking)+
+              factor(condition_broad):factor(floor2):factor(orientation)
+              )
+
+stargazer_r( list(osreg07,osreg06, osreg05, osreg03), 
+             digits=2,single.row = TRUE, out="osreg07060503.html")
+
+RMSE07 <- round(
+  RMSE_Log(
+    pred = predict(
+      osreg07, newdata = property_df[property_df$train == 0,]
+    ), 
+    obs = property_df$ln_psqm[property_df$train == 0], 
+    na.rm = TRUE), digits = 3)
+
+
+  
+
+predv <- predict(
+  osreg07, newdata = property_df[property_df$train == 0,]
+)
+errv <- (predv - obsv)
+
+sqmvm <-matrix(sqmv, nrow=length(sqmv), ncol=1)
+errvm <-matrix(errv, nrow=length(errv), ncol=1)
+
+vizmat <- cbind(sqmvm,errvm)
+colnames(vizmat) <- c("sqm", "err")
+vizmat <-data.frame(vizmat)
+
+png(filename="Errdistr_oosample_lotsofinteract.png", res = 200, width = 800, height = 800)
+ggplot(data=vizmat)+
+  aes( x=sqm,y=err)+
+  geom_point(size = 1, colour = "indianred")+
+  labs(
+    title='Distribution of residual error\nper squaremeter',
+    subtitle='Out of sample multiple regression\n w/ many interactions',
+    y='Difference between predicted\nand observed price',
+    x='area (squaremeter)'
+  )+
+  theme_bw()
+dev.off()
+
+#SECTION 05: Cross validated model with interaction 
+#using level models
+k <- 5
+folds <- sample(rep(1:k, nrow(property_df)/k))
+RMSE101 <-NULL
+RMSE102 <-NULL
+RMSE103 <-NULL
+RMSE104 <-NULL
+RMSE105 <-NULL
+
+RMSE101_TST <-NULL
+RMSE102_TST <-NULL
+RMSE103_TST <-NULL
+RMSE104_TST <-NULL
+RMSE105_TST <-NULL
+
+BIC101 <-NULL
+BIC102 <-NULL
+BIC103 <-NULL
+BIC104 <-NULL
+BIC105 <-NULL
+
+for(i in 1:k){
+  #... the training set is every fold, which is not the actual
+  property_df_train <- property_df[folds!=i,]
+  #... and the test set is the actual
+  property_df_test <- property_df[folds == i,]
+  
+  cvreg101 <- lm(data = property_df_train, psqm ~ sqm_sp2060 + sqm_sp60p + floor0 + floor_sp05 + floor_sp6p + 
+                number_of_floor + factor(condition_broad) + lift_d + hasbalcony + aircond_d + 
+                factor(heating_broad) + concrete_blockflat_d + 
+                balconyXfloor2 + liftXfloor2 + factor(floor)*concrete_blockflat_d + 
+                factor(floor)*number_of_floor + factor(floor)*heating_broad+
+                factor(view)+
+                factor(parking)+
+                factor(orientation))
+  RMSE101_TST[i] <- RMSE_Lev(
+    pred = predict(cvreg101, newdata = property_df_test), 
+    obs = property_df_test$psqm, 
+    na.rm = TRUE)
+  RMSE101[i] <- RMSE_Lev(
+    pred = predict(cvreg101, newdata = property_df_train), 
+    obs = property_df_train$psqm, 
+    na.rm = TRUE)
+  BIC101[i] <- BIC(cvreg101)
+  
+  cvreg102 <- lm(data = property_df_train, psqm ~ new_flat*sqm_sp2060 + new_flat*sqm_sp60p + new_flat*floor0 + 
+                new_flat*floor_sp05 + new_flat*floor_sp6p + number_of_floor + 
+                factor(condition_broad) + lift_d + hasbalcony  + 
+                aircond_d + factor(heating_broad) + concrete_blockflat_d + 
+                new_flat*number_of_floor + new_flat*lift_d + new_flat*liftXfloor2 + 
+                new_flat*hasbalcony + new_flat*balconyXfloor2 + new_flat*aircond_d + 
+                new_flat*factor(heating_broad) + new_flat*concrete_blockflat_d+
+                  factor(view)+
+                  factor(parking)+
+                  factor(orientation))
+  RMSE102_TST[i] <- RMSE_Lev(
+    pred = predict(cvreg102, newdata = property_df_test), 
+    obs = property_df_test$psqm, 
+    na.rm = TRUE)
+  RMSE102[i] <- RMSE_Lev(
+    pred = predict(cvreg102, newdata = property_df_train), 
+    obs = property_df_train$psqm, 
+    na.rm = TRUE)
+  BIC102[i] <- BIC(cvreg102)
+  
+  cvreg103 <- lm(data = property_df_train, psqm ~ new_flat*sqm_sp2060 + new_flat*sqm_sp60p + 
+                new_flat*floor0 + new_flat*floor_sp05 + new_flat*floor_sp6p + number_of_floor + 
+                factor(condition_broad) + lift_d + hasbalcony  + aircond_d + factor(heating_broad) + 
+                concrete_blockflat_d + factor(condition_broad)*factor(floor2) + 
+                factor(condition_broad)*number_of_floor + factor(condition_broad)*lift_d + 
+                factor(condition_broad):liftXfloor2 + factor(condition_broad)*hasbalcony + 
+                factor(condition_broad):balconyXfloor2 + factor(condition_broad)*aircond_d + 
+                factor(condition_broad)*factor(heating_broad) + 
+                factor(condition_broad)*concrete_blockflat_d + 
+                factor(condition_broad)*factor(floor2)*number_of_floor + 
+                factor(condition_broad)*factor(floor2)*factor(heating_broad) + 
+                factor(condition_broad)*factor(floor2)*concrete_blockflat_d+
+                  factor(view)+
+                  factor(parking)+
+                  factor(orientation))
+  RMSE103_TST[i] <- RMSE_Lev(
+    pred = predict(cvreg103, newdata = property_df_test), 
+    obs = property_df_test$psqm, 
+    na.rm = TRUE)
+  RMSE103[i] <- RMSE_Lev(
+    pred = predict(cvreg103, newdata = property_df_train), 
+    obs = property_df_train$psqm, 
+    na.rm = TRUE)
+  BIC103[i] <- BIC(cvreg103)
+  
+  
+  cvreg104 <- lm(data = property_df_train, psqm ~ new_flat*factor(sqmcut) + number_of_floor + 
+                factor(condition_broad) + lift_d + hasbalcony  + aircond_d + 
+                factor(heating_broad) + concrete_blockflat_d + 
+                factor(condition_broad)*factor(floor2) + 
+                factor(condition_broad)*number_of_floor + factor(condition_broad)*lift_d + 
+                factor(condition_broad)*liftXfloor2 + factor(condition_broad)*hasbalcony + 
+                factor(condition_broad)*balconyXfloor2 + factor(condition_broad)*aircond_d + 
+                factor(condition_broad)*factor(heating_broad) + factor(condition_broad)*concrete_blockflat_d + 
+                factor(condition_broad)*factor(floor2)*number_of_floor + 
+                  factor(condition_broad)*factor(floor2) * factor(heating_broad) + 
+                  factor(condition_broad)*factor(floor2)*concrete_blockflat_d+
+                  factor(view)+
+                  factor(parking)+
+                  factor(orientation))
+  RMSE104_TST[i] <- RMSE_Lev(
+    pred = predict(cvreg104, newdata = property_df_test), 
+    obs = property_df_test$psqm, 
+    na.rm = TRUE)
+  RMSE104[i] <- RMSE_Lev(
+    pred = predict(cvreg104, newdata = property_df_train), 
+    obs = property_df_train$psqm, 
+    na.rm = TRUE)
+  BIC104[i] <- BIC(cvreg104)
+  
+  
+}
+
+
+#organizing RMSE into a data frame
+#here the code is broken, most possibly because of the extra comma
+models_lev_rmse <- data.frame(matrix( nrow=5, ncol=4))
+#assigning colnames
+colnames(models_lev_rmse) <- c("Model 1", "Model 2", "Model 3", "Model 4")
+#assigning rownames
+rownames(models_lev_rmse) <- c("BIC", "RMSE insample", "RMSE test CV", "RMSE min", "RMSE max")
+
+#calculating RMSE from the mean of the bic and rmse vectors for all 8 level models
+models_lev_rmse[,1] <- c(mean(BIC101), mean(RMSE101), mean(RMSE101_TST),min(RMSE101_TST) , max(RMSE101_TST))
+models_lev_rmse[,2] <- c(mean(BIC102), mean(RMSE102), mean(RMSE102_TST),min(RMSE102_TST) , max(RMSE102_TST))
+models_lev_rmse[,3] <- c(mean(BIC103), mean(RMSE103), mean(RMSE103_TST),min(RMSE103_TST) , max(RMSE103_TST))
+models_lev_rmse[,4] <- c(mean(BIC104), mean(RMSE104), mean(RMSE104_TST),min(RMSE104_TST) , max(RMSE104_TST))
+models_lev_rmse
+
+#6: Now random forest
+library(randomForest)
+library(ROCR)
+library(pander)
+rf_df$description <- NULL
+rf_df_work <- rf_df[,c(1,2,3,15,19, 20,21,22,24,25,32,37,38,39,40,46)]
+rf_df_work <- rf_df_work[!is.na(rf_df_work$psqm),]
+rf_df_work$rnd <-runif(nrow(rf_df_work))
+rf_df_work <- rf_df_work[order(rf_df_work$rnd),]
+rf_df_work$rnd <- NULL
+rf_df_work$liftxfloor <- NULL
+#70% training set 30% test set
+trainset <- rf_df_work[0:round( nrow(rf_df_work) * 0.7 ),]
+testset <- rf_df_work[(round( nrow(rf_df_work) * 0.7 )+1) : nrow(rf_df_work),]
+rfmod_t100 <- randomForest(psqm ~ .,data=trainset,ntree=100, importance=TRUE)
+
+pander(rfmod_t100)
+pred <- predict(rfmod_t100, testset)
+
+RMSE_RFT <- RMSE_Lev(
+  pred = predict(rfmod_t100, testset), 
+  obs = testset$psqm, 
+  na.rm = TRUE)
+
+
+
+
+obsv <- testset$psqm
+errv <- (pred - obsv)
+sqvm <- testset$sqm
+
+sqmvm <-matrix(sqmv, nrow=length(sqvm), ncol=1)
+errvm <-matrix(errv, nrow=length(errv), ncol=1)
+
+vizmat <- cbind(sqmvm,errvm)
+colnames(vizmat) <- c("sqm", "err")
+vizmat <-data.frame(vizmat)
+
+png(filename="Random forest.png", res = 200, width = 800, height = 800)
+ggplot(data=vizmat)+
+  aes( x=sqm,y=err)+
+  geom_point(size = 1, colour = "indianred")+
+  labs(
+    title='Distribution of residual error\nper squaremeter',
+    subtitle='Random forest - 100 trees',
+    y='Difference between predicted\nand observed price',
+    x='area (squaremeter)'
+  )+
+  theme_bw()
+dev.off()
+
+png(filename="Random forest imp.png", res = 200, width = 1200, height = 800)
+varImpPlot(rfmod_t100, type=2)
+dev.off()
+
 
