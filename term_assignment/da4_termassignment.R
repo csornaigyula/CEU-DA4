@@ -1,5 +1,4 @@
 rm(list=ls())
-setwd("C:\\Users\\csorn\\GIT\\CEU-DA4\\term_assignment")
 library(moments)
 library(plyr)
 library(data.table)
@@ -230,12 +229,12 @@ dev.off()
 #for only those flats, where size is below 180 sqm
 png(filename="Graph_lev_lev.png", res = 200, width = 800, height = 800)
 ggplot(data = property_df[property_df$sqm < 180,], aes(x = sqm, y = psqm))+
-labs(
-  title='Dependency between flat size\nand price per squaremeter',
-  y='price per squaremeter',
-  x='area (squaremeter)',
-  caption='Flat sizes over 180 sqm are excluded from analysis'
-)+
+  labs(
+    title='Dependency between flat size\nand price per squaremeter',
+    y='price per squaremeter',
+    x='area (squaremeter)',
+    caption='Flat sizes over 180 sqm are excluded from analysis'
+  )+
   theme_bw()+
   geom_smooth(colour = "darkred")
 dev.off()
@@ -420,30 +419,49 @@ property_df$train <- 0
 property_df$train[train_ids] <- 1
 
 
-# regressions 
-# in sample multiple regression baseline
+##########################################################
+# REGRESSIONS
+##########################################################
 
-osreg01 <- lm(data = property_df[property_df$train == 1,], 
+# SECTION01: in sample multiple regression baseline
+
+osreg01 <- lm(data = property_df, 
                ln_psqm ~ lnsqm_sp2060 + lnsqm_sp60p +  heating_broad + 
                  condition_broad+
                  parking+  hasbalcony+ concrete_blockflat_d+
                  floor_sp05+floor_sp6p+ view+ balcony+lift_d+aircond_d)
-osreg02 <- lm(data = property_df[property_df$train == 1,], 
+osreg02 <- lm(data = property_df, 
               ln_psqm ~ lnsqm_sp2060 + lnsqm_sp60p +  heating_broad )
-osreg03 <- lm(data = property_df[property_df$train == 1,], 
+osreg03 <- lm(data = property_df, 
               psqm ~ sqm_sp2060 + sqm_sp60p +  heating_broad + 
                 condition_broad+
                 parking+  hasbalcony+ concrete_blockflat_d+
                 floor_sp05+floor_sp6p+ view+ balcony+lift_d+aircond_d)
-osreg04 <- lm(data = property_df[property_df$train == 1,], 
+osreg04 <- lm(data = property_df, 
               psqm ~ sqm_sp2060 + lnsqm_sp60p +  heating_broad )
 stargazer_r( list(osreg01, osreg02, osreg03, osreg04), 
              digits=2,single.row = TRUE, out="osreg0102.html")
 
+RMSE_Lev <- function(pred, obs, na.rm = FALSE){
+  sqrt(
+    mean(
+      (obs - pred)^2, 
+      na.rm = na.rm
+    )
+  )
+}
+
+RMSE_Log <- function(pred, obs, na.rm = TRUE){
+  sqrt(
+    mean(
+      (exp(obs) - exp(pred))^2, na.rm = na.rm
+    )
+  )
+}
 
 
 RMSE01 <- round(
-  RMSE_Lev(
+  RMSE_Log(
     pred = predict(
       osreg01, newdata = property_df[property_df$train == 0,]
       ), 
@@ -451,7 +469,7 @@ RMSE01 <- round(
     na.rm = TRUE), digits = 3)
 
 RMSE02 <- round(
-  RMSE_Lev(
+  RMSE_Log(
     pred = predict(
       osreg02, newdata = property_df[property_df$train == 0,]
     ), 
@@ -466,6 +484,39 @@ RMSE03 <- round(
     obs = property_df$psqm[property_df$train == 0], 
     na.rm = TRUE), digits = 3)
 
+sqmv <- property_df[property_df$train == 0,]$sqm
+predv <- predict(
+  osreg03, newdata = property_df[property_df$train == 0,]
+)
+obsv <- property_df[property_df$train == 0,]$psqm
+sqerrv <- (predv - obsv)^2
+errv <- (predv - obsv)
+
+sqmvm <-matrix(sqmv, nrow=length(sqmv), ncol=1)
+errvm <-matrix(errv, nrow=length(errv), ncol=1)
+
+?matrix
+vizmat <- cbind(sqmvm,errvm)
+colnames(vizmat) <- c("sqm", "err")
+vizmat <-data.frame(vizmat)
+
+
+  
+
+png(filename="Errdistr_insample.png", res = 200, width = 800, height = 800)
+ggplot(data=vizmat)+
+  aes( x=sqm,y=err)+
+  geom_point(size = 1, colour = "indianred")+
+  labs(
+    title='Distribution of residual error\nper squaremeter',
+    subtitle='Out of sample multiple regression',
+    y='Difference between predicted\nand observed price',
+    x='area (squaremeter)'
+  )+
+  theme_bw()
+dev.off()
+
+
 RMSE04 <- round(
   RMSE_Lev(
     pred = predict(
@@ -476,5 +527,50 @@ RMSE04 <- round(
 
 
 
+#SECTION02: Out of sample multiple regression without crossvalidation and interactions
+#Argument against log regression
 
+osreg05 <- lm(data = property_df[property_df$train == 1,], 
+              psqm ~ sqm_sp2060 + sqm_sp60p +  heating_broad + 
+                condition_broad+
+                parking+  hasbalcony+ concrete_blockflat_d+
+                floor_sp05+floor_sp6p+ view+ balcony+lift_d+aircond_d)
+stargazer_r( list(osreg05, osreg03), 
+             digits=2,single.row = TRUE, out="osreg0503.html")
+
+
+RMSE05 <- round(
+  RMSE_Lev(
+    pred = predict(
+      osreg05, newdata = property_df[property_df$train == 0,]
+    ), 
+    obs = property_df$psqm[property_df$train == 0], 
+    na.rm = TRUE), digits = 3)
+
+predv <- predict(
+  osreg05, newdata = property_df[property_df$train == 0,]
+)
+errv <- (predv - obsv)
+
+sqmvm <-matrix(sqmv, nrow=length(sqmv), ncol=1)
+errvm <-matrix(errv, nrow=length(errv), ncol=1)
+
+vizmat <- cbind(sqmvm,errvm)
+colnames(vizmat) <- c("sqm", "err")
+vizmat <-data.frame(vizmat)
+
+png(filename="Errdistr_oosample.png", res = 200, width = 800, height = 800)
+ggplot(data=vizmat)+
+  aes( x=sqm,y=err)+
+  geom_point(size = 1, colour = "indianred")+
+  labs(
+    title='Distribution of residual error\nper squaremeter',
+    subtitle='Out of sample multiple regression',
+    y='Difference between predicted\nand observed price',
+    x='area (squaremeter)'
+  )+
+  theme_bw()
+dev.off()
+
+#SECTION
 
