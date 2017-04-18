@@ -239,6 +239,18 @@ ggplot(data = property_df[property_df$sqm < 180,], aes(x = sqm, y = psqm))+
   geom_smooth(colour = "darkred")
 dev.off()
 
+png(filename="Graph_floor_lev_lev.png", res = 200, width = 800, height = 800)
+ggplot(data = property_df[property_df$sqm < 180,], aes(x = floor, y = psqm))+
+  labs(
+    title='Dependency between flat location(floor)\nand price per squaremeter',
+    y='price per squaremeter',
+    x='which floor flat is on',
+    caption='Flat sizes over 180 sqm are excluded from analysis'
+  )+
+  theme_bw()+
+  geom_smooth(colour = "darkred")
+dev.off()
+
 #dropping all observations, where the flat size is smaller than 180 sqm
 property_df <- property_df[property_df$sqm <= 180,]
 
@@ -438,7 +450,7 @@ osreg03 <- lm(data = property_df,
                 parking+  hasbalcony+ concrete_blockflat_d+
                 floor_sp05+floor_sp6p+ view+ balcony+lift_d+aircond_d)
 osreg04 <- lm(data = property_df, 
-              psqm ~ sqm_sp2060 + lnsqm_sp60p +  heating_broad )
+              psqm ~ sqm_sp2060 + sqm_sp60p +  heating_broad )
 stargazer_r( list(osreg01, osreg02, osreg03, osreg04), 
              digits=2,single.row = TRUE, out="osreg0102.html")
 
@@ -825,6 +837,7 @@ models_lev_rmse
 library(randomForest)
 library(ROCR)
 library(pander)
+rf_df<-property_df
 rf_df$description <- NULL
 rf_df_work <- rf_df[,c(1,2,3,15,19, 20,21,22,24,25,32,37,38,39,40,46)]
 rf_df_work <- rf_df_work[!is.na(rf_df_work$psqm),]
@@ -836,7 +849,7 @@ rf_df_work$liftxfloor <- NULL
 trainset <- rf_df_work[0:round( nrow(rf_df_work) * 0.7 ),]
 testset <- rf_df_work[(round( nrow(rf_df_work) * 0.7 )+1) : nrow(rf_df_work),]
 rfmod_t100 <- randomForest(psqm ~ .,data=trainset,ntree=100, importance=TRUE)
-
+?randomForest
 pander(rfmod_t100)
 pred <- predict(rfmod_t100, testset)
 
